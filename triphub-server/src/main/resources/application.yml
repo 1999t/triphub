@@ -1,0 +1,27 @@
+server:
+  port: 8090
+
+spring:
+  application:
+    name: triphub-server
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/triphub?useSSL=false&serverTimezone=UTC&characterEncoding=utf-8&allowPublicKeyRetrieval=true
+    username: root
+    password: 123456
+  redis:
+    host: localhost
+    port: 6379
+  jackson:
+    default-property-inclusion: non_null
+
+triphub:
+  jwt:
+    admin-secret-key: admin-secret
+    admin-ttl: 7200000
+    admin-token-name: admin-token
+    user-secret-key: user-secret
+    user-ttl: 7200000
+    user-token-name: token
+
+
