@@ -1,0 +1,520 @@
+{
+    "info": {
+      "_postman_id": "7e3c1b2f-0000-0000-0000-triphub-auth-demo",
+      "name": "TripHub Auth API",
+      "description": "TripHub 用户验证码发送与登录接口测试集合。",
+      "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "variable": [
+      {
+        "key": "baseUrl",
+        "value": "http://localhost:8090"
+      },
+      {
+        "key": "phone",
+        "value": "13800000000"
+      }
+    ],
+    "item": [
+      {
+        "name": "用户-发送验证码 /user/auth/sendCode",
+        "request": {
+          "method": "POST",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": {
+            "mode": "raw",
+            "raw": "{\n  \"phone\": \"{{phone}}\",\n  \"code\": \"\"\n}"
+          },
+          "url": {
+            "raw": "{{baseUrl}}/user/auth/sendCode",
+            "host": [
+              "{{baseUrl}}"
+            ],
+            "path": [
+              "user",
+              "auth",
+              "sendCode"
+            ]
+          }
+        },
+        "response": []
+      },
+      {
+        "name": "用户-登录 /user/auth/login",
+        "request": {
+          "method": "POST",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": {
+            "mode": "raw",
+            "raw": "{\n  \"phone\": \"{{phone}}\",\n  \"code\": \"1234\"\n}"
+          },
+          "url": {
+            "raw": "{{baseUrl}}/user/auth/login",
+            "host": [
+              "{{baseUrl}}"
+            ],
+            "path": [
+              "user",
+              "auth",
+              "login"
+            ]
+          }
+        },
+        "response": [],
+        "event": [
+          {
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "// 解析响应，若成功则把 data 中的 token 写入集合变量 userToken",
+                "if (pm.response.code === 200) {",
+                "  try {",
+                "    var res = pm.response.json();",
+                "    if (res && res.code === 0 && res.data) {",
+                "      pm.collectionVariables.set('userToken', res.data);",
+                "      console.log('userToken set to collection variables');",
+                "    } else {",
+                "      console.log('login response not success or no data field');",
+                "    }",
+                "  } catch (e) {",
+                "    console.log('parse response error', e);",
+                "  }",
+                "}"
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "name": "用户-当前信息 /user/profile/me",
+        "request": {
+          "method": "GET",
+          "header": [
+            {
+              "key": "token",
+              "value": "{{userToken}}"
+            }
+          ],
+          "url": {
+            "raw": "{{baseUrl}}/user/profile/me",
+            "host": [
+              "{{baseUrl}}"
+            ],
+            "path": [
+              "user",
+              "profile",
+              "me"
+            ]
+          }
+        },
+        "response": []
+      },
+      {
+        "name": "行程-创建 /user/trip",
+        "request": {
+          "method": "POST",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "key": "token",
+              "value": "{{userToken}}"
+            }
+          ],
+          "body": {
+            "mode": "raw",
+            "raw": "{\n  \"title\": \"成都三日美食行\",\n  \"destinationCity\": \"成都\",\n  \"startDate\": \"2025-12-20\",\n  \"endDate\": \"2025-12-22\",\n  \"days\": 3,\n  \"visibility\": 2\n}"
+          },
+          "url": {
+            "raw": "{{baseUrl}}/user/trip",
+            "host": [
+              "{{baseUrl}}"
+            ],
+            "path": [
+              "user",
+              "trip"
+            ]
+          }
+        },
+        "response": [],
+        "event": [
+          {
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "// 将新建行程ID写入集合变量 tripId",
+                "if (pm.response.code === 200) {",
+                "  try {",
+                "    var res = pm.response.json();",
+                "    if (res && res.code === 0 && res.data) {",
+                "      pm.collectionVariables.set('tripId', res.data);",
+                "      console.log('tripId set to collection variables');",
+                "    }",
+                "  } catch (e) {",
+                "    console.log('parse response error', e);",
+                "  }",
+                "}"
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "name": "行程-详情 /user/trip/{id}",
+        "request": {
+          "method": "GET",
+          "header": [
+            {
+              "key": "token",
+              "value": "{{userToken}}"
+            }
+          ],
+          "url": {
+            "raw": "{{baseUrl}}/user/trip/{{tripId}}",
+            "host": [
+              "{{baseUrl}}"
+            ],
+            "path": [
+              "user",
+              "trip",
+              "{{tripId}}"
+            ]
+          }
+        },
+        "response": []
+      },
+      {
+        "name": "行程-我的列表 /user/trip/list",
+        "request": {
+          "method": "GET",
+          "header": [
+            {
+              "key": "token",
+              "value": "{{userToken}}"
+            }
+          ],
+          "url": {
+            "raw": "{{baseUrl}}/user/trip/list?page=1&size=10",
+            "host": [
+              "{{baseUrl}}"
+            ],
+            "path": [
+              "user",
+              "trip",
+              "list"
+            ],
+            "query": [
+              {
+                "key": "page",
+                "value": "1"
+              },
+              {
+                "key": "size",
+                "value": "10"
+              }
+            ]
+          }
+        },
+        "response": []
+      },
+      {
+        "name": "行程-按天详情 /user/trip/day/detail",
+        "request": {
+          "method": "GET",
+          "header": [
+            {
+              "key": "token",
+              "value": "{{userToken}}"
+            }
+          ],
+          "url": {
+            "raw": "{{baseUrl}}/user/trip/day/detail?tripId={{tripId}}&dayIndex=1",
+            "host": [
+              "{{baseUrl}}"
+            ],
+            "path": [
+              "user",
+              "trip",
+              "day",
+              "detail"
+            ],
+            "query": [
+              {
+                "key": "tripId",
+                "value": "{{tripId}}"
+              },
+              {
+                "key": "dayIndex",
+                "value": "1"
+              }
+            ]
+          }
+        },
+        "response": []
+      },
+      {
+        "name": "行程-设置行程日备注 /user/trip/day/note",
+        "request": {
+          "method": "PUT",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "key": "token",
+              "value": "{{userToken}}"
+            }
+          ],
+          "body": {
+            "mode": "raw",
+            "raw": "{\n  \"tripId\": \"{{tripId}}\",\n  \"dayIndex\": 1,\n  \"note\": \"第一天主要逛春熙路、宽窄巷子\"\n}"
+          },
+          "url": {
+            "raw": "{{baseUrl}}/user/trip/day/note",
+            "host": [
+              "{{baseUrl}}"
+            ],
+            "path": [
+              "user",
+              "trip",
+              "day",
+              "note"
+            ]
+          }
+        },
+        "response": []
+      },
+      {
+        "name": "行程-新增条目 /user/trip/item",
+        "request": {
+          "method": "POST",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "key": "token",
+              "value": "{{userToken}}"
+            }
+          ],
+          "body": {
+            "mode": "raw",
+            "raw": "{\n  \"tripId\": \"{{tripId}}\",\n  \"dayIndex\": 1,\n  \"type\": \"FOOD\",\n  \"placeId\": 1,\n  \"startTime\": \"10:00:00\",\n  \"endTime\": \"12:00:00\",\n  \"memo\": \"春熙路小吃打卡\"\n}"
+          },
+          "url": {
+            "raw": "{{baseUrl}}/user/trip/item",
+            "host": [
+              "{{baseUrl}}"
+            ],
+            "path": [
+              "user",
+              "trip",
+              "item"
+            ]
+          }
+        },
+        "response": [],
+        "event": [
+          {
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "// 将新建行程条目ID写入集合变量 tripItemId",
+                "if (pm.response.code === 200) {",
+                "  try {",
+                "    var res = pm.response.json();",
+                "    if (res && res.code === 0 && res.data) {",
+                "      pm.collectionVariables.set('tripItemId', res.data);",
+                "      console.log('tripItemId set to collection variables');",
+                "    }",
+                "  } catch (e) {",
+                "    console.log('parse response error', e);",
+                "  }",
+                "}"
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "name": "行程-更新条目 /user/trip/item",
+        "request": {
+          "method": "PUT",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "key": "token",
+              "value": "{{userToken}}"
+            }
+          ],
+          "body": {
+            "mode": "raw",
+            "raw": "{\n  \"id\": \"{{tripItemId}}\",\n  \"type\": \"FOOD\",\n  \"placeId\": 1,\n  \"startTime\": \"10:30:00\",\n  \"endTime\": \"12:30:00\",\n  \"memo\": \"调整为晚些出发\"\n}"
+          },
+          "url": {
+            "raw": "{{baseUrl}}/user/trip/item",
+            "host": [
+              "{{baseUrl}}"
+            ],
+            "path": [
+              "user",
+              "trip",
+              "item"
+            ]
+          }
+        },
+        "response": []
+      },
+      {
+        "name": "行程-删除条目 /user/trip/item/{id}",
+        "request": {
+          "method": "DELETE",
+          "header": [
+            {
+              "key": "token",
+              "value": "{{userToken}}"
+            }
+          ],
+          "url": {
+            "raw": "{{baseUrl}}/user/trip/item/{{tripItemId}}",
+            "host": [
+              "{{baseUrl}}"
+            ],
+            "path": [
+              "user",
+              "trip",
+              "item",
+              "{{tripItemId}}"
+            ]
+          }
+        },
+        "response": []
+      },
+      {
+        "name": "发现-热门行程 /user/discover/hot-trips",
+        "request": {
+          "method": "GET",
+          "header": [
+            {
+              "key": "token",
+              "value": "{{userToken}}"
+            }
+          ],
+          "url": {
+            "raw": "{{baseUrl}}/user/discover/hot-trips?limit=10",
+            "host": [
+              "{{baseUrl}}"
+            ],
+            "path": [
+              "user",
+              "discover",
+              "hot-trips"
+            ],
+            "query": [
+              {
+                "key": "limit",
+                "value": "10"
+              }
+            ]
+          }
+        },
+        "response": []
+      },
+      {
+        "name": "发现-热门目的地 /user/discover/hot-destinations",
+        "request": {
+          "method": "GET",
+          "header": [
+            {
+              "key": "token",
+              "value": "{{userToken}}"
+            }
+          ],
+          "url": {
+            "raw": "{{baseUrl}}/user/discover/hot-destinations?limit=10",
+            "host": [
+              "{{baseUrl}}"
+            ],
+            "path": [
+              "user",
+              "discover",
+              "hot-destinations"
+            ],
+            "query": [
+              {
+                "key": "limit",
+                "value": "10"
+              }
+            ]
+          }
+        },
+        "response": []
+      },
+      {
+        "name": "秒杀-下单 /user/seckill/{activityId}",
+        "request": {
+          "method": "POST",
+          "header": [
+            {
+              "key": "token",
+              "value": "{{userToken}}"
+            }
+          ],
+          "url": {
+            "raw": "{{baseUrl}}/user/seckill/1",
+            "host": [
+              "{{baseUrl}}"
+            ],
+            "path": [
+              "user",
+              "seckill",
+              "1"
+            ]
+          }
+        },
+        "response": [],
+        "event": [
+          {
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "// store returned seckill orderId for debugging",
+                "if (pm.response.code === 200) {",
+                "  try {",
+                "    var res = pm.response.json();",
+                "    if (res && res.code === 0 && res.data) {",
+                "      pm.collectionVariables.set('seckillOrderId', res.data);",
+                "      console.log('seckillOrderId set to collection variables');",
+                "    }",
+                "  } catch (e) {",
+                "    console.log('parse response error', e);",
+                "  }",
+                "}"
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  }
