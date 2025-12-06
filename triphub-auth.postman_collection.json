@@ -515,6 +515,122 @@
             }
           }
         ]
+      },
+      {
+        "name": "画像-获取当前用户画像 /user/profile",
+        "request": {
+          "method": "GET",
+          "header": [
+            {
+              "key": "token",
+              "value": "{{userToken}}"
+            }
+          ],
+          "url": {
+            "raw": "{{baseUrl}}/user/profile",
+            "host": [
+              "{{baseUrl}}"
+            ],
+            "path": [
+              "user",
+              "profile"
+            ]
+          }
+        },
+        "response": []
+      },
+      {
+        "name": "画像-设置或更新用户画像 /user/profile",
+        "request": {
+          "method": "POST",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "key": "token",
+              "value": "{{userToken}}"
+            }
+          ],
+          "body": {
+            "mode": "raw",
+            "raw": "{\n  \"tags\": [\n    { \"code\": \"food\", \"name\": \"美食\", \"weight\": 5 },\n    { \"code\": \"photo\", \"name\": \"摄影\", \"weight\": 3 }\n  ],\n  \"budget\": \"1000-3000\",\n  \"duration\": \"4-7\",\n  \"travel_style\": \"slow\"\n}"
+          },
+          "url": {
+            "raw": "{{baseUrl}}/user/profile",
+            "host": [
+              "{{baseUrl}}"
+            ],
+            "path": [
+              "user",
+              "profile"
+            ]
+          }
+        },
+        "response": []
+      },
+      {
+        "name": "AI-行程规划 /user/ai/trip-plan",
+        "request": {
+          "method": "POST",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "key": "token",
+              "value": "{{userToken}}"
+            }
+          ],
+          "body": {
+            "mode": "raw",
+            "raw": "{\n  \"destinationCity\": \"成都\",\n  \"days\": 3,\n  \"startDate\": \"2025-10-01\"\n}"
+          },
+          "url": {
+            "raw": "{{baseUrl}}/user/ai/trip-plan",
+            "host": [
+              "{{baseUrl}}"
+            ],
+            "path": [
+              "user",
+              "ai",
+              "trip-plan"
+            ]
+          }
+        },
+        "response": []
+      },
+      {
+        "name": "发现-个性化推荐行程 /user/discover/recommend-trips",
+        "request": {
+          "method": "GET",
+          "header": [
+            {
+              "key": "token",
+              "value": "{{userToken}}"
+            }
+          ],
+          "url": {
+            "raw": "{{baseUrl}}/user/discover/recommend-trips?limit=5",
+            "host": [
+              "{{baseUrl}}"
+            ],
+            "path": [
+              "user",
+              "discover",
+              "recommend-trips"
+            ],
+            "query": [
+              {
+                "key": "limit",
+                "value": "5"
+              }
+            ]
+          }
+        },
+        "response": []
       }
     ]
   }

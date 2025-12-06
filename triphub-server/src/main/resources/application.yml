@@ -27,4 +27,12 @@ triphub:
     user-ttl: 7200000
     user-token-name: token
 
+  ai:
+    # OpenAI-compatible chat completion endpoint, e.g. https://api.openai.com/v1/chat/completions
+    base-url: https://api.openai.com/v1/chat/completions
+    # Place your real API key via environment / external config in production.
+    api-key: ${TRIPHUB_AI_API_KEY:}
+    # Model name, e.g. gpt-4.1-mini or gpt-4o-mini
+    model: gpt-4.1-mini
+
 

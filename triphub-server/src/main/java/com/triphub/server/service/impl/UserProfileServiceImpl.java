@@ -7,6 +7,7 @@ import com.triphub.server.service.UserProfileService;
 import org.springframework.stereotype.Service;
 
 /**
+ * 用户画像服务实现，基于 user_id 做简单的查询与保存。
  * Simple user profile service based on user_id lookup.
  */
 @Service
