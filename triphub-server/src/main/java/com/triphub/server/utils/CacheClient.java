@@ -3,6 +3,7 @@ package com.triphub.server.utils;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.triphub.common.redis.RedisData;
+import com.triphub.server.metrics.MetricsRecorder;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -22,6 +23,7 @@ public class CacheClient {
 
     private final StringRedisTemplate stringRedisTemplate;
     private final ObjectMapper objectMapper;
+    private final MetricsRecorder metricsRecorder;
 
     private static final ExecutorService CACHE_REBUILD_EXECUTOR = Executors.newFixedThreadPool(10);
 
@@ -55,6 +57,8 @@ public class CacheClient {
         String key = keyPrefix + id;
         String json = stringRedisTemplate.opsForValue().get(key);
         if (StringUtils.hasText(json)) {
+            // 命中缓存
+            metricsRecorder.recordTripCacheHit(true);
             try {
                 return objectMapper.readValue(json, type);
             } catch (Exception e) {
@@ -66,6 +70,7 @@ public class CacheClient {
        // 这里判断 json != null，但上面 hasText(json) 已经是 false，说明 json 是空字符串 ""
        // 这是空值缓存的命中
         if (json != null) {
+            metricsRecorder.recordTripCacheHit(true);
             return null;
         }
         // 查询数据库
@@ -74,8 +79,10 @@ public class CacheClient {
         //下次有人请求同样的 Key，就直接返回空，不打数据库
         if (r == null) {
             stringRedisTemplate.opsForValue().set(key, "", nullTtlMinutes, TimeUnit.MINUTES);
+            metricsRecorder.recordTripCacheHit(false);
             return null;
         }
+        metricsRecorder.recordTripCacheHit(false);
         set(key, r, time, unit);
         return r;
     }
@@ -91,6 +98,7 @@ public class CacheClient {
         try {
             // 1. 缓存不存在：兜底走一次 DB，再写入逻辑过期缓存（适合未预热场景）
             if (!StringUtils.hasText(json)) {
+                metricsRecorder.recordTripCacheHit(false);
                 R dbResult = dbFallback.apply(id);
                 if (dbResult == null) {
                     return null;
@@ -100,6 +108,7 @@ public class CacheClient {
             }
 
             // 2. 缓存存在：反序列化并判断逻辑过期时间
+            metricsRecorder.recordTripCacheHit(true);
             RedisData redisData = objectMapper.readValue(json, RedisData.class);
             R data = objectMapper.convertValue(redisData.getData(), type);
             LocalDateTime expireTime = redisData.getExpireTime();

@@ -6,6 +6,7 @@ import com.triphub.common.utils.JwtUtil;
 import io.jsonwebtoken.Claims;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.MDC;
 import org.springframework.stereotype.Component;
 import org.springframework.web.method.HandlerMethod;
 import org.springframework.web.servlet.HandlerInterceptor;
@@ -37,7 +38,10 @@ public class JwtTokenAdminInterceptor implements HandlerInterceptor {
             Claims claims = JwtUtil.parseJWT(jwtProperties.getAdminSecretKey(), token);
             Object id = claims.get("adminId");
             if (id != null) {
-                BaseContext.setCurrentId(Long.valueOf(id.toString()));
+                Long adminId = Long.valueOf(id.toString());
+                BaseContext.setCurrentId(adminId);
+                // 管理端同样将 ID 写入 MDC，这里沿用 userId key，便于统一检索
+                MDC.put("userId", String.valueOf(adminId));
             }
             return true;
         } catch (Exception e) {

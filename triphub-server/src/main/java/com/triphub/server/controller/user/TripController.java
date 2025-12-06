@@ -39,7 +39,7 @@ public class TripController {
     private final TripItemService tripItemService;
 
     /**
-     * Create a trip (simple version): only save basic trip info.
+     * 创建行程（简化版）：仅保存行程主表的基础信息。
      */
     @PostMapping
     public Result<Long> createTrip(@RequestBody Trip trip) {
@@ -53,7 +53,7 @@ public class TripController {
     }
 
     /**
-     * Trip detail with cache.
+     * 查询行程详情（带缓存）。
      */
     @GetMapping("/{id}")
     public Result<Trip> getTrip(@PathVariable("id") Long id) {
@@ -61,13 +61,13 @@ public class TripController {
         if (trip == null) {
             return Result.error("行程不存在");
         }
-        // Increase view count and write into hot trips leaderboard
+        // 增加浏览量并写入热门行程榜单相关的 Redis ZSet
         tripService.increaseViewCountAndHotScore(trip);
         return Result.success(trip);
     }
 
     /**
-     * Current user's trip list with pagination.
+     * 当前登录用户的行程分页列表。
      */
     @GetMapping("/list")
     public Result<PageResult> listMyTrips(@RequestParam(defaultValue = "1") int page,
@@ -86,7 +86,7 @@ public class TripController {
     }
 
     /**
-     * View trip plan of a specific day (with item list).
+     * 查看某一天的行程计划以及该天的所有行程条目。
      */
     @GetMapping("/day/detail")
     public Result<TripDayDetailVO> getTripDayDetail(@RequestParam Long tripId,
@@ -131,7 +131,7 @@ public class TripController {
     }
 
     /**
-     * Set or update note of a specific trip day (create if not exists).
+     * 设置或更新某一天的行程备注（如该天记录不存在则自动创建）。
      */
     @PutMapping("/day/note")
     public Result<Void> updateTripDayNote(@RequestBody TripDayNoteDTO dto) {
@@ -172,7 +172,7 @@ public class TripController {
     }
 
     /**
-     * Create a trip item by (tripId + dayIndex).
+     * 按 tripId + dayIndex 创建一条行程条目。
      */
     @PostMapping("/item")
     public Result<Long> createTripItem(@RequestBody TripItemCreateDTO dto) {
@@ -218,7 +218,7 @@ public class TripController {
     }
 
     /**
-     * Update a trip item.
+     * 更新行程条目。
      */
     @PutMapping("/item")
     public Result<Void> updateTripItem(@RequestBody TripItemUpdateDTO dto) {
@@ -256,7 +256,7 @@ public class TripController {
     }
 
     /**
-     * Delete a trip item.
+     * 删除行程条目。
      */
     @DeleteMapping("/item/{id}")
     public Result<Void> deleteTripItem(@PathVariable("id") Long id) {

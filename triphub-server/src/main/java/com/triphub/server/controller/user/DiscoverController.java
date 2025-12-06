@@ -26,7 +26,6 @@ import java.util.stream.Collectors;
 
 /**
  * 发现页相关接口：热门行程、热门目的地、个性化推荐行程等。
- * Discover page APIs: hot trips, hot destinations and personalized recommendations.
  */
 @RestController
 @RequestMapping("/user/discover")
@@ -40,7 +39,6 @@ public class DiscoverController {
 
     /**
      * 热门行程榜单接口，按 Redis ZSet 分数倒序获取 Top N。
-     * Hot trips leaderboard, ordered by Redis ZSet score (top N).
      */
     @GetMapping("/hot-trips")
     public Result<List<Trip>> hotTrips(@RequestParam(defaultValue = "10") int limit) {
@@ -67,7 +65,7 @@ public class DiscoverController {
                 .filter(Objects::nonNull)
                 .collect(Collectors.toMap(Trip::getId, t -> t));
 
-        // Keep ZSet order and filter invisible trips (only public trips)
+        // 按照 ZSet 原有顺序返回，并过滤不可见行程（只保留公开行程）
         List<Trip> ordered = ids.stream()
                 .map(tripMap::get)
                 .filter(Objects::nonNull)
@@ -79,7 +77,6 @@ public class DiscoverController {
 
     /**
      * 热门目的地榜单接口，按 Redis ZSet 分数倒序获取 Top N。
-     * Hot destinations leaderboard, ordered by Redis ZSet score (top N).
      * ZSet 的 member 为目的地城市名（destinationCity），由行程浏览时累计。
      */
     @GetMapping("/hot-destinations")
@@ -100,7 +97,6 @@ public class DiscoverController {
 
     /**
      * 为当前用户推荐行程列表接口。
-     * Personalized recommended trips for current user based on hot leaderboard and simple profile.
      *
      * 基本思路：
      * - 从热门行程 ZSet 获取一批候选行程；
@@ -136,7 +132,7 @@ public class DiscoverController {
                 .filter(Objects::nonNull)
                 .collect(Collectors.toMap(Trip::getId, t -> t));
 
-        // Load user profile for explanation.
+        // 加载用户画像，用于生成推荐理由。
         UserProfile profile = userProfileService.getByUserId(userId);
         Map<String, Object> profileMap = parseProfile(profile);
 

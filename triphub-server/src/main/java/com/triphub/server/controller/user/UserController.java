@@ -21,8 +21,7 @@ import java.util.Map;
 /**
  * 用户相关接口：
  * - 查询当前登录用户基础信息；
- * - 设置 / 获取当前用户画像 JSON（Setup 阶段问卷 + 后续更新）。
- * User related APIs: current user info and flexible persona profile.
+ * - 设置 / 获取当前用户画像 JSON（用于 Setup 阶段问卷与后续更新）。
  */
 @RestController
 @RequestMapping("/user/profile")
@@ -34,8 +33,7 @@ public class UserController {
     private final ObjectMapper objectMapper;
 
     /**
-     * 当前登录用户信息，依赖 JWT + BaseContext。
-     * Get current logged-in user info based on JWT + BaseContext.
+     * 当前登录用户信息，依赖 JWT + BaseContext 解析出的用户 ID。
      */
     @GetMapping("/me")
     public Result<User> currentUser() {
@@ -48,8 +46,7 @@ public class UserController {
     }
 
     /**
-     * 获取当前用户画像 JSON。
-     * Get current user profile (persona) JSON.
+     * 获取当前用户画像 JSON（用于 AI 推荐及个性化展示）。
      */
     @GetMapping
     public Result<Map<String, Object>> getUserProfile() {
@@ -66,7 +63,6 @@ public class UserController {
             Map<String, Object> map = objectMapper.readValue(profile.getProfileJson(), Map.class);
             return Result.success(map);
         } catch (JsonProcessingException e) {
-            // If stored JSON is broken, just return empty profile to client.
             // 如果存储的 JSON 已损坏，不抛出异常，直接返回空画像，避免影响接口可用性。
             return Result.success(Collections.emptyMap());
         }

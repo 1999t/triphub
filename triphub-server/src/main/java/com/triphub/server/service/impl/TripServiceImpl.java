@@ -6,6 +6,7 @@ import com.triphub.pojo.entity.Trip;
 import com.triphub.server.mapper.TripMapper;
 import com.triphub.server.service.TripService;
 import com.triphub.server.utils.CacheClient;
+import com.triphub.server.metrics.MetricsRecorder;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
@@ -18,6 +19,7 @@ public class TripServiceImpl extends ServiceImpl<TripMapper, Trip> implements Tr
 
     private final CacheClient cacheClient;
     private final StringRedisTemplate stringRedisTemplate;
+    private final MetricsRecorder metricsRecorder;
 
     @Override
     public Trip queryTripById(Long id) {
@@ -39,21 +41,23 @@ public class TripServiceImpl extends ServiceImpl<TripMapper, Trip> implements Tr
         }
         Long id = trip.getId();
 
-        // Simple incremental update for view_count
+        // 简单地将 view_count 字段自增 1
         this.update()
                 .setSql("view_count = view_count + 1")
                 .eq("id", id)
                 .update();
 
-        // Write into hot trips ZSet, score accumulates by view count
+        // 将行程写入热门行程 ZSet，分数按浏览次数累加
         stringRedisTemplate.opsForZSet()
                 .incrementScore(RedisConstants.HOT_TRIP_ZSET, String.valueOf(id), 1D);
+        metricsRecorder.recordHotRankingUpdate("trip");
 
-        // Write into hot destinations ZSet using destinationCity as member
+        // 将目的地城市写入热门目的地 ZSet，member 为 destinationCity
         String destCity = trip.getDestinationCity();
         if (destCity != null && !destCity.isEmpty()) {
             stringRedisTemplate.opsForZSet()
                     .incrementScore(RedisConstants.HOT_DEST_ZSET, destCity, 1D);
+            metricsRecorder.recordHotRankingUpdate("dest");
         }
     }
 }

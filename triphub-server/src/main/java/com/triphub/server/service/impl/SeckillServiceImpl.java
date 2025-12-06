@@ -7,6 +7,7 @@ import com.triphub.pojo.entity.SeckillActivity;
 import com.triphub.server.config.MqConfig;
 import com.triphub.server.service.SeckillActivityService;
 import com.triphub.server.service.SeckillService;
+import com.triphub.server.metrics.MetricsRecorder;
 import com.triphub.server.utils.RedisIdWorker;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -37,6 +38,7 @@ public class SeckillServiceImpl implements SeckillService {
     private final StringRedisTemplate stringRedisTemplate;
     private final RedisIdWorker redisIdWorker;
     private final RabbitTemplate rabbitTemplate;
+    private final MetricsRecorder metricsRecorder;
 
     private static final String SECKILL_LUA;
 
@@ -98,6 +100,8 @@ public class SeckillServiceImpl implements SeckillService {
         if (result == null) {
             throw new IllegalStateException("Seckill failed by unknown reason");
         }
+        // 记录秒杀 Lua 预检的结果，用于统计成功率、库存不足与一人一单被拒绝次数
+        metricsRecorder.recordSeckillPrecheckResult(result);
         if (result == 1L) {
             throw new IllegalStateException("Seckill stock is not enough");
         }
@@ -118,7 +122,7 @@ public class SeckillServiceImpl implements SeckillService {
             rabbitTemplate.convertAndSend(MqConfig.SECKILL_EXCHANGE, "seckill", payload);
         } catch (Exception e) {
             log.error("Send seckill order message failed", e);
-            // message send failed, consider compensating or alerting; stock has already been reduced in Redis
+            // 发送 MQ 消息失败，可考虑补偿或告警；此时 Redis 中的库存已经扣减
         }
 
         return orderId;
