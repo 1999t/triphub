@@ -1,0 +1,61 @@
+version: "3.9"
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: triphub-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: 123456
+      MYSQL_DATABASE: triphub
+      TZ: Asia/Shanghai
+    ports:
+      - "3306:3306"
+    volumes:
+      - ./db/init_triphub.sql:/docker-entrypoint-initdb.d/init_triphub.sql
+
+  redis:
+    image: redis:7.2
+    container_name: triphub-redis
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: triphub-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: triphub
+      RABBITMQ_DEFAULT_PASS: 123456
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+
+  triphub-server:
+    build:
+      context: ./triphub-server
+      dockerfile: Dockerfile
+    container_name: triphub-server
+    depends_on:
+      - mysql
+      - redis
+      - rabbitmq
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      # DB
+      TRIPHUB_DB_URL: jdbc:mysql://mysql:3306/triphub?useSSL=false&serverTimezone=UTC&characterEncoding=utf-8&allowPublicKeyRetrieval=true
+      TRIPHUB_DB_USERNAME: root
+      TRIPHUB_DB_PASSWORD: 123456
+      # Redis
+      TRIPHUB_REDIS_HOST: redis
+      TRIPHUB_REDIS_PORT: 6379
+      # RabbitMQ
+      TRIPHUB_MQ_HOST: rabbitmq
+      TRIPHUB_MQ_PORT: 5672
+      TRIPHUB_MQ_USERNAME: triphub
+      TRIPHUB_MQ_PASSWORD: 123456
+      # AI
+      TRIPHUB_AI_API_KEY: ""
+    ports:
+      - "8090:8090"
+
+

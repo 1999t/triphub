@@ -1,0 +1,18 @@
+spring:
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://${TRIPHUB_DB_HOST:localhost}:${TRIPHUB_DB_PORT:3306}/triphub?useSSL=false&serverTimezone=UTC&characterEncoding=utf-8&allowPublicKeyRetrieval=true
+    username: ${TRIPHUB_DB_USERNAME:root}
+    password: ${TRIPHUB_DB_PASSWORD:123456}
+
+  redis:
+    host: ${TRIPHUB_REDIS_HOST:localhost}
+    port: ${TRIPHUB_REDIS_PORT:6379}
+
+  rabbitmq:
+    host: ${TRIPHUB_MQ_HOST:localhost}
+    port: ${TRIPHUB_MQ_PORT:5672}
+    username: ${TRIPHUB_MQ_USERNAME:guest}
+    password: ${TRIPHUB_MQ_PASSWORD:guest}
+
+
