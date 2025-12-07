@@ -41,7 +41,7 @@ public class SeckillOrderListener {
         Long activityId = toLong(payload.get("activityId"));
 
         if (orderId == null || userId == null || activityId == null) {
-            log.warn("Invalid seckill order message: {}", payload);
+            log.warn("非法的秒杀订单消息: {}", payload);
             return;
         }
 
@@ -53,7 +53,7 @@ public class SeckillOrderListener {
             // 尝试获取锁，避免消费者长期阻塞
             locked = lock.tryLock(1, 5, TimeUnit.SECONDS);
             if (!locked) {
-                log.warn("Failed to acquire lock for seckill order, userId={}, activityId={}", userId, activityId);
+                log.warn("获取秒杀订单分布式锁失败, userId={}, activityId={}", userId, activityId);
                 return;
             }
 
@@ -62,14 +62,14 @@ public class SeckillOrderListener {
                     .eq(Order::getUserId, userId)
                     .eq(Order::getSeckillActivityId, activityId));
             if (count > 0) {
-                log.info("User already has order for this activity, userId={}, activityId={}", userId, activityId);
+                log.info("用户已存在该活动订单, userId={}, activityId={}", userId, activityId);
                 return;
             }
 
             // 加载活动信息（可用于后续根据活动配置计算金额等）
             SeckillActivity activity = seckillActivityService.getById(activityId);
             if (activity == null) {
-                log.warn("Seckill activity not found, activityId={}", activityId);
+                log.warn("秒杀活动不存在, activityId={}", activityId);
                 return;
             }
 
@@ -90,7 +90,7 @@ public class SeckillOrderListener {
                     .gt(SeckillActivity::getStock, 0)
                     .update();
         } catch (Exception e) {
-            log.error("Handle seckill order message failed", e);
+            log.error("处理秒杀订单消息失败", e);
         } finally {
             if (locked) {
                 lock.unlock();

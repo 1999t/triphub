@@ -121,7 +121,7 @@ public class SeckillServiceImpl implements SeckillService {
         try {
             rabbitTemplate.convertAndSend(MqConfig.SECKILL_EXCHANGE, "seckill", payload);
         } catch (Exception e) {
-            log.error("Send seckill order message failed", e);
+            log.error("发送秒杀订单 MQ 消息失败", e);
             // 发送 MQ 消息失败，可考虑补偿或告警；此时 Redis 中的库存已经扣减
         }
 

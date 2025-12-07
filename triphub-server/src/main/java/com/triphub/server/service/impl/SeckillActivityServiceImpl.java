@@ -43,9 +43,9 @@ public class SeckillActivityServiceImpl extends ServiceImpl<SeckillActivityMappe
             String stockStr = String.valueOf(activity.getStock());
             Boolean set = stringRedisTemplate.opsForValue().setIfAbsent(key, stockStr);
             if (Boolean.TRUE.equals(set)) {
-                log.info("init seckill stock for activityId={}, stock={}", id, activity.getStock());
+                log.info("初始化秒杀活动库存到 Redis: activityId={}, stock={}", id, activity.getStock());
             } else {
-                log.info("skip init seckill stock for activityId={} because Redis key already exists", id);
+                log.info("跳过秒杀活动库存预热, Redis 已存在 Key: activityId={}", id);
             }
         }
     }
