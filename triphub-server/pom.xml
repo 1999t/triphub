@@ -13,6 +13,13 @@
     <artifactId>triphub-server</artifactId>
 
     <dependencies>
+        <!-- 单元测试与集成测试基础依赖 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
         <dependency>
             <groupId>com.triphub</groupId>
             <artifactId>triphub-common</artifactId>
