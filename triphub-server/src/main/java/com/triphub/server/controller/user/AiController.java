@@ -12,6 +12,7 @@ import com.triphub.server.service.TripService;
 import com.triphub.server.service.UserProfileService;
 import com.triphub.server.utils.AiClient;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -31,6 +32,7 @@ import java.util.Map;
  */
 @RestController
 @RequestMapping("/user/ai")
+@Slf4j
 @RequiredArgsConstructor
 public class AiController {
 
