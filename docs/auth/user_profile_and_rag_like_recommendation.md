@@ -225,4 +225,68 @@
 
 > 这样可以在不引入向量库的情况下，自然地讲出「我们有用户画像、用行为数据做简单检索，再把结果作为上下文给大模型，形成了一个轻量级 RAG 味道的推荐系统」。
 
+---
+
+### 6. AI 调用与降级测试步骤（包含异常场景）
+
+> 下面所有测试均针对 `POST /user/ai/trip-plan` 接口，结合 `AiClient` 与 `AiController` 的实现，验证「外部 LLM 可用」与「各种异常下的本地降级」是否符合预期。
+
+- **6.1 基线：不配置任何 AI Key（默认走本地降级）**
+  1. 确认 `application.yml` 中：
+     - `triphub.ai.base-url` 使用默认值或一个合法地址；
+     - `TRIPHUB_AI_API_KEY` 环境变量为空（默认即为空）。
+  2. 按第 5 节 Demo 脚本依次调用登录、`POST /user/profile`、`POST /user/ai/trip-plan`。
+  3. 期望：
+     - 响应 `code = 0`；
+     - `data.trip` 正常插入一条行程记录；
+     - `data.explanation` 为一段以「本行程是根据你的基础出行偏好生成的」开头的本地拼接中文说明（即 `AiController.callLlmForExplanation` 的降级文本）。
+
+- **6.2 配置真实 AI Key，验证正常调用链路（可选）**
+  1. 设置环境变量（以 OpenAI 兼容接口为例）：
+     ```bash
+     export TRIPHUB_AI_BASE_URL=https://api.openai.com/v1/chat/completions
+     export TRIPHUB_AI_API_KEY=sk-xxx                # 替换为你自己的 key
+     export TRIPHUB_AI_MODEL=gpt-4.1-mini           # 或兼容模型名
+     ```
+  2. 重启 `triphub-server`，再次调用 `POST /user/ai/trip-plan`。
+  3. 期望：
+     - 响应 `code = 0`；
+     - 日志中能看到「AI 行程规划开始/结束」两条 INFO 日志且无 ERROR；
+     - `data.explanation` 文本明显不同于 6.1 中的本地拼接文案（由大模型生成）。
+
+- **6.3 配置错误的 API Key，验证 401 等错误下的降级**
+  1. 设置环境变量：
+     ```bash
+     export TRIPHUB_AI_BASE_URL=https://api.openai.com/v1/chat/completions
+     export TRIPHUB_AI_API_KEY=invalid-key
+     export TRIPHUB_AI_MODEL=gpt-4.1-mini
+     ```
+  2. 重启应用，调用 `POST /user/ai/trip-plan`。
+  3. 期望：
+     - 接口仍返回 `code = 0`；
+     - `data.trip` 正常写库；
+     - `data.explanation` 回退为本地拼接文案；
+     - 后端日志中可看到一条 `调用外部 LLM 失败` 的 ERROR 日志（来自 `AiClient.chat`），但不会影响整体请求成功。
+
+- **6.4 base-url 不可达（网络/域名错误）时的降级**
+  1. 设置环境变量，将 base-url 指向一个不存在的地址，例如：
+     ```bash
+     export TRIPHUB_AI_BASE_URL=http://127.0.0.1:9999/invalid
+     export TRIPHUB_AI_API_KEY=dummy
+     export TRIPHUB_AI_MODEL=gpt-4.1-mini
+     ```
+  2. 重启应用，调用 `POST /user/ai/trip-plan`。
+  3. 期望：
+     - 接口仍返回 `code = 0`；
+     - `data.explanation` 为本地拼接文案；
+     - 日志中有 `调用外部 LLM 失败` 的 ERROR 栈（如连接超时/Connection refused），证明异常被捕获并未向上抛出。
+
+- **6.5 画像 JSON 异常时的兼容性测试**
+  1. 手动把 `user_profile.profile_json` 改成一段非法 JSON（仅限测试环境）；
+  2. 再次调用 `POST /user/ai/trip-plan`。
+  3. 期望：
+     - 接口不抛 500，仍然 `code = 0`；
+     - `data.trip` 与 `data.explanation` 正常返回，只是解释文案不再包含画像中的 tag/budget 信息；
+     - 证明 `AiController.parseProfile` 在解析失败时正确回退为 `Collections.emptyMap()`。
+
 
