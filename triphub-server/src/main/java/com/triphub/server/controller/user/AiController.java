@@ -5,15 +5,20 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.triphub.common.context.BaseContext;
 import com.triphub.common.result.Result;
 import com.triphub.pojo.dto.TripAiPlanRequestDTO;
+import com.triphub.pojo.dto.AiAssistantRequestDTO;
 import com.triphub.pojo.entity.Trip;
 import com.triphub.pojo.entity.UserProfile;
 import com.triphub.pojo.vo.AiTripPlanVO;
 import com.triphub.server.service.TripService;
 import com.triphub.server.service.UserProfileService;
+import com.triphub.server.service.TripFavoriteService;
 import com.triphub.server.utils.AiClient;
+import com.triphub.server.limit.SimpleRateLimiter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.util.StringUtils;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -23,12 +28,14 @@ import java.time.LocalDate;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 /**
  * AI 相关接口（RAG 味道 Demo，无向量库版本）。
  *
  * 目前主要提供：
  * - /user/ai/trip-plan：结合用户画像和目的地信息，调用外部 LLM 生成行程解释，并创建一条 Trip 记录。
+ * - /user/ai/assistant：简单的「工具编排」示例，根据 type 聚合多种数据后交给大模型处理。
  */
 @RestController
 @RequestMapping("/user/ai")
@@ -38,14 +45,18 @@ public class AiController {
 
     private final TripService tripService;
     private final UserProfileService userProfileService;
+    private final TripFavoriteService tripFavoriteService;
     private final ObjectMapper objectMapper;
     private final AiClient aiClient;
+    private final StringRedisTemplate stringRedisTemplate;
+    private final SimpleRateLimiter simpleRateLimiter;
 
     /**
      * AI 行程规划接口：生成行程解释文案并创建一条 Trip 记录。
      */
     @PostMapping("/trip-plan")
-    public Result<AiTripPlanVO> generateTripPlan(@RequestBody TripAiPlanRequestDTO dto) {
+    public Result<AiTripPlanVO> generateTripPlan(@RequestBody TripAiPlanRequestDTO dto,
+                                                 @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
         Long userId = BaseContext.getCurrentId();
         if (userId == null) {
             return Result.error("未登录或 token 无效");
@@ -53,6 +64,18 @@ public class AiController {
         if (dto == null || !StringUtils.hasText(dto.getDestinationCity())
                 || dto.getDays() == null || dto.getDays() <= 0) {
             return Result.error("目的地或天数不能为空");
+        }
+
+        // 简单的按用户限流：同一用户 60 秒内最多调用 10 次 AI 行程规划
+        boolean allowed = simpleRateLimiter.tryAcquire("ai:trip-plan:user", String.valueOf(userId), 60, 10);
+        if (!allowed) {
+            return Result.error("AI 请求过于频繁，请稍后再试");
+        }
+
+        // 如果带了幂等 Key，先尝试从 Redis 读取之前的结果，避免重复创建行程和多次计费
+        AiTripPlanVO idempotentVo = tryLoadIdempotentResult(idempotencyKey);
+        if (idempotentVo != null) {
+            return Result.success(idempotentVo);
         }
 
         // 加载当前用户画像 JSON，如果存在则反序列化为 Map。
@@ -82,17 +105,77 @@ public class AiController {
         trip.setVisibility(0);
         tripService.save(trip);
 
+        // 查询用户最近收藏的行程，用于丰富 AI 解释的上下文。
+        String recentFavoritesJson = buildRecentFavoritesJson(userId);
+
         // 调用外部大模型生成本次行程的解释文案。
         log.info("AI 行程规划开始: userId={}, destinationCity={}, days={}, topTag={}",
                 userId, dto.getDestinationCity(), dto.getDays(), tagSummary);
-        String explanation = callLlmForExplanation(profileMap, dto.getDestinationCity(), dto.getDays(), tagSummary);
+        String explanation = callLlmForExplanation(profileMap, dto.getDestinationCity(), dto.getDays(), tagSummary, recentFavoritesJson);
         log.info("AI 行程规划结束: userId={}, tripId={}, hasExplanation={}",
                 userId, trip.getId(), StringUtils.hasText(explanation));
 
         AiTripPlanVO vo = new AiTripPlanVO();
         vo.setTrip(trip);
         vo.setExplanation(explanation);
+
+        // 将本次结果按 Idempotency-Key 写入 Redis，方便后续相同 Key 的请求直接复用
+        cacheIdempotentResult(idempotencyKey, vo);
         return Result.success(vo);
+    }
+
+    /**
+     * 轻量级 AI 助手接口：根据 type 做不同的工具编排，然后交给 LLM 生成文本结果。
+     *
+     * type 示例：
+     * - plan_trip：偏向行程规划场景，重点使用画像 + 最近收藏；
+     * - recommend_trip：偏向推荐场景，可结合热门行程榜单等（当前实现主要做画像 + 收藏的编排）。
+     */
+    @PostMapping("/assistant")
+    public Result<String> assistant(@RequestBody AiAssistantRequestDTO dto) {
+        Long userId = BaseContext.getCurrentId();
+        if (userId == null) {
+            return Result.error("未登录或 token 无效");
+        }
+        if (dto == null || !StringUtils.hasText(dto.getType())) {
+            return Result.error("type 不能为空");
+        }
+
+        String type = dto.getType();
+        // 画像与收藏是所有类型共享的基础上下文
+        UserProfile profile = userProfileService.getByUserId(userId);
+        Map<String, Object> profileMap = parseProfile(profile);
+        String recentFavoritesJson = buildRecentFavoritesJson(userId);
+
+        String systemPrompt = "You are a smart travel assistant. "
+                + "You will receive user profile, recent favorites and an intent type, "
+                + "and should reply in Chinese with a concise answer.";
+
+        StringBuilder userPrompt = new StringBuilder();
+        userPrompt.append("User profile (JSON): ").append(safeToJson(profileMap)).append("\n");
+        if (StringUtils.hasText(recentFavoritesJson)) {
+            userPrompt.append("User recent favorite trips (JSON): ")
+                    .append(recentFavoritesJson)
+                    .append("\n");
+        }
+        userPrompt.append("Assistant type: ").append(type).append("\n");
+        if (StringUtils.hasText(dto.getDestinationCity())) {
+            userPrompt.append("Destination city: ").append(dto.getDestinationCity()).append("\n");
+        }
+        if (dto.getDays() != null && dto.getDays() > 0) {
+            userPrompt.append("Days: ").append(dto.getDays()).append("\n");
+        }
+        if (StringUtils.hasText(dto.getQuestion())) {
+            userPrompt.append("User question: ").append(dto.getQuestion()).append("\n");
+        }
+        userPrompt.append("Please answer in Chinese, focusing on the given type and context. ")
+                .append("Do not output JSON, only natural language.");
+
+        String answer = aiClient.chat(systemPrompt, userPrompt.toString());
+        if (!StringUtils.hasText(answer)) {
+            return Result.error("AI 暂时不可用，请稍后重试");
+        }
+        return Result.success(answer);
     }
 
     private Map<String, Object> parseProfile(UserProfile profile) {
@@ -136,7 +219,11 @@ public class AiController {
         return bestName;
     }
 
-    private String callLlmForExplanation(Map<String, Object> profileMap, String city, Integer days, String topTagName) {
+    private String callLlmForExplanation(Map<String, Object> profileMap,
+                                         String city,
+                                         Integer days,
+                                         String topTagName,
+                                         String recentFavoritesJson) {
         String systemPrompt = "You are a travel planning assistant. "
                 + "Given a user's travel preferences and a rough trip request, "
                 + "you should generate a short, friendly explanation (2~3 sentences) "
@@ -144,6 +231,11 @@ public class AiController {
 
         StringBuilder userPrompt = new StringBuilder();
         userPrompt.append("User profile (JSON): ").append(safeToJson(profileMap)).append("\n");
+        if (StringUtils.hasText(recentFavoritesJson)) {
+            userPrompt.append("User recent favorite trips (JSON): ")
+                    .append(recentFavoritesJson)
+                    .append("\n");
+        }
         userPrompt.append("Destination city: ").append(city).append("\n");
         userPrompt.append("Days: ").append(days).append("\n");
         if (StringUtils.hasText(topTagName)) {
@@ -170,6 +262,74 @@ public class AiController {
             return sb.toString();
         }
         return explanation;
+    }
+
+    /**
+     * 构造当前用户最近收藏行程的精简 JSON，用于作为 LLM 的参考上下文。
+     */
+    private String buildRecentFavoritesJson(Long userId) {
+        try {
+            var favorites = tripFavoriteService.listRecentFavorites(userId, 5);
+            if (favorites == null || favorites.isEmpty()) {
+                return null;
+            }
+            var tripIds = favorites.stream()
+                    .map(f -> f.getTripId())
+                    .distinct()
+                    .toList();
+            var trips = tripService.listByIds(tripIds);
+            if (trips == null || trips.isEmpty()) {
+                return null;
+            }
+            var simpleList = trips.stream()
+                    .filter(t -> t != null && t.getId() != null)
+                    .map(t -> Map.of(
+                            "tripId", t.getId(),
+                            "title", t.getTitle(),
+                            "destinationCity", t.getDestinationCity(),
+                            "days", t.getDays()))
+                    .toList();
+            return objectMapper.writeValueAsString(simpleList);
+        } catch (Exception e) {
+            // 画像增强失败不影响主流程
+            return null;
+        }
+    }
+
+    /**
+     * 幂等性：尝试根据 Idempotency-Key 从 Redis 读取历史 AI 行程规划结果。
+     */
+    private AiTripPlanVO tryLoadIdempotentResult(String idempotencyKey) {
+        if (!StringUtils.hasText(idempotencyKey)) {
+            return null;
+        }
+        try {
+            String key = "ai:idemp:trip-plan:" + idempotencyKey;
+            String json = stringRedisTemplate.opsForValue().get(key);
+            if (!StringUtils.hasText(json)) {
+                return null;
+            }
+            return objectMapper.readValue(json, AiTripPlanVO.class);
+        } catch (Exception e) {
+            log.warn("读取 AI 幂等结果失败, key={}", idempotencyKey, e);
+            return null;
+        }
+    }
+
+    /**
+     * 幂等性：将本次 AI 行程规划结果缓存到 Redis，避免同一 Idempotency-Key 重复创建行程和调用 LLM。
+     */
+    private void cacheIdempotentResult(String idempotencyKey, AiTripPlanVO vo) {
+        if (!StringUtils.hasText(idempotencyKey) || vo == null) {
+            return;
+        }
+        try {
+            String key = "ai:idemp:trip-plan:" + idempotencyKey;
+            String json = objectMapper.writeValueAsString(vo);
+            stringRedisTemplate.opsForValue().set(key, json, 10, TimeUnit.MINUTES);
+        } catch (Exception e) {
+            log.warn("写入 AI 幂等结果失败, key={}", idempotencyKey, e);
+        }
     }
 
     private String safeToJson(Map<String, Object> profileMap) {

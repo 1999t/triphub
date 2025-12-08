@@ -108,3 +108,14 @@ CREATE TABLE IF NOT EXISTS `user_profile` (
   UNIQUE KEY `uk_user_profile_user` (`user_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户画像表';
 
+-- 9. 行程收藏表（TripFavorite），记录用户收藏的行程
+CREATE TABLE IF NOT EXISTS `trip_favorite` (
+  `id`          BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `user_id`     BIGINT       NOT NULL                COMMENT '用户ID',
+  `trip_id`     BIGINT       NOT NULL                COMMENT '行程ID',
+  `create_time` DATETIME     DEFAULT CURRENT_TIMESTAMP COMMENT '收藏时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_favorite_user_trip` (`user_id`, `trip_id`),
+  KEY `idx_favorite_trip` (`trip_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='行程收藏表';
+

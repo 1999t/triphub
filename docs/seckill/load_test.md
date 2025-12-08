@@ -4,18 +4,26 @@
 
 ---
 
-### 0. 10 分钟快速压测脚本（推荐先走一遍）
+### 0. 10 分钟从 0 到 1 部署 + 压测脚本（推荐先走一遍）
 
-1. **启动一整套环境**
+1. **本机打包后端 JAR**
+   - 在项目根目录执行：
+   ```bash
+   cd triphub
+   mvn -pl triphub-server -am clean package
+   ```
+   - 期望在 `triphub-server/target/` 下生成 `triphub-server-1.0-SNAPSHOT.jar`。
+
+2. **启动一整套容器环境**
    - 在 `triphub` 根目录执行：
    ```bash
    docker-compose up --build -d
    ```
    - 等待 MySQL / Redis / RabbitMQ / triphub-server 全部就绪（`docker ps` 确认容器均为 `healthy` 或 `Up`）。
 
-2. **初始化数据库与秒杀活动**
+3. **初始化数据库与秒杀活动**
    - Docker 会自动执行 `db/init_triphub.sql` 建库建表；
-   - 在容器内或本机执行脚本初始化活动和库存：
+   - 在宿主机（本机）执行脚本初始化活动和 Redis 库存（脚本会通过 TCP 连接 `127.0.0.1:3306` 与 `127.0.0.1:6379`）：
    ```bash
    cd triphub
    bash script/init_seckill.sh

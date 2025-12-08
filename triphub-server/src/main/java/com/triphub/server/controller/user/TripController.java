@@ -15,6 +15,7 @@ import com.triphub.pojo.vo.TripDayDetailVO;
 import com.triphub.server.service.TripDayService;
 import com.triphub.server.service.TripItemService;
 import com.triphub.server.service.TripService;
+import com.triphub.server.service.TripFavoriteService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -37,6 +38,7 @@ public class TripController {
     private final TripService tripService;
     private final TripDayService tripDayService;
     private final TripItemService tripItemService;
+    private final TripFavoriteService tripFavoriteService;
 
     /**
      * 创建行程（简化版）：仅保存行程主表的基础信息。
@@ -285,6 +287,43 @@ public class TripController {
         }
 
         tripItemService.removeById(id);
+        return Result.success(null);
+    }
+
+    /**
+     * 收藏行程（幂等）：如果已收藏则直接返回成功。
+     */
+    @PostMapping("/{id}/favorite")
+    public Result<Void> favoriteTrip(@PathVariable("id") Long tripId) {
+        Long userId = BaseContext.getCurrentId();
+        if (userId == null) {
+            return Result.error("未登录或 token 无效");
+        }
+        if (tripId == null) {
+            return Result.error("参数错误");
+        }
+        Trip trip = tripService.getById(tripId);
+        if (trip == null) {
+            return Result.error("行程不存在");
+        }
+        // 这里不限制只能收藏自己的行程，公开行程和自己创建的行程都可以收藏
+        tripFavoriteService.addFavorite(userId, tripId);
+        return Result.success(null);
+    }
+
+    /**
+     * 取消收藏行程（幂等）：如果本来就未收藏也视为成功。
+     */
+    @DeleteMapping("/{id}/favorite")
+    public Result<Void> unfavoriteTrip(@PathVariable("id") Long tripId) {
+        Long userId = BaseContext.getCurrentId();
+        if (userId == null) {
+            return Result.error("未登录或 token 无效");
+        }
+        if (tripId == null) {
+            return Result.error("参数错误");
+        }
+        tripFavoriteService.removeFavorite(userId, tripId);
         return Result.success(null);
     }
 }

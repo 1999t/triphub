@@ -5,7 +5,7 @@
 
 set -e
 
-MYSQL_HOST=${MYSQL_HOST:-localhost}
+MYSQL_HOST=${MYSQL_HOST:-127.0.0.1}
 MYSQL_PORT=${MYSQL_PORT:-3306}
 MYSQL_USER=${MYSQL_USER:-root}
 MYSQL_PASSWORD=${MYSQL_PASSWORD:-123456}
@@ -20,9 +20,17 @@ STOCK=${STOCK:-50}
 
 echo "Initializing seckill activity in MySQL..."
 
-mysql -h"${MYSQL_HOST}" -P"${MYSQL_PORT}" -u"${MYSQL_USER}" -p"${MYSQL_PASSWORD}" "${MYSQL_DB}" <<EOF
+mysql --protocol=tcp -h"${MYSQL_HOST}" -P"${MYSQL_PORT}" -u"${MYSQL_USER}" -p"${MYSQL_PASSWORD}" "${MYSQL_DB}" <<EOF
 INSERT INTO seckill_activity (id, title, place_id, stock, begin_time, end_time, status)
-VALUES (${ACTIVITY_ID}, '${ACTIVITY_TITLE}', ${PLACE_ID}, ${STOCK}, NOW(), DATE_ADD(NOW(), INTERVAL 1 DAY), 1)
+VALUES (
+  ${ACTIVITY_ID},
+  '${ACTIVITY_TITLE}',
+  ${PLACE_ID},
+  ${STOCK},
+  DATE_SUB(NOW(), INTERVAL 1 DAY),      -- 开始时间设置为一天前，避免出现“Seckill has not started”
+  DATE_ADD(NOW(), INTERVAL 1 DAY),      -- 结束时间为一天后
+  1
+)
 ON DUPLICATE KEY UPDATE
   title = VALUES(title),
   place_id = VALUES(place_id),
