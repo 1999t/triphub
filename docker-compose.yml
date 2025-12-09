@@ -20,16 +20,6 @@ services:
     ports:
       - "6379:6379"
 
-  rabbitmq:
-    image: rabbitmq:3-management
-    container_name: triphub-rabbitmq
-    environment:
-      RABBITMQ_DEFAULT_USER: triphub
-      RABBITMQ_DEFAULT_PASS: 123456
-    ports:
-      - "5672:5672"
-      - "15672:15672"
-
   triphub-server:
     build:
       context: ./triphub-server
@@ -38,7 +28,6 @@ services:
     depends_on:
       - mysql
       - redis
-      - rabbitmq
     environment:
       SPRING_PROFILES_ACTIVE: prod
       # DB
@@ -48,13 +37,10 @@ services:
       # Redis
       TRIPHUB_REDIS_HOST: redis
       TRIPHUB_REDIS_PORT: 6379
-      # RabbitMQ
-      TRIPHUB_MQ_HOST: rabbitmq
-      TRIPHUB_MQ_PORT: 5672
-      TRIPHUB_MQ_USERNAME: triphub
-      TRIPHUB_MQ_PASSWORD: 123456
       # AI
-      TRIPHUB_AI_API_KEY: ""
+      TRIPHUB_AI_BASE_URL: "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
+      TRIPHUB_AI_MODEL: "qwen-max"
+      TRIPHUB_AI_API_KEY: "sk-8d134ef026c14c369e40e9ac103a3a8a"
     ports:
       - "8090:8090"
 

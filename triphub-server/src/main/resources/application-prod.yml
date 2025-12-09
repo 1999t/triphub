@@ -8,11 +8,3 @@ spring:
   redis:
     host: ${TRIPHUB_REDIS_HOST}
     port: ${TRIPHUB_REDIS_PORT:6379}
-
-  rabbitmq:
-    host: ${TRIPHUB_MQ_HOST}
-    port: ${TRIPHUB_MQ_PORT:5672}
-    username: ${TRIPHUB_MQ_USERNAME}
-    password: ${TRIPHUB_MQ_PASSWORD}
-
-

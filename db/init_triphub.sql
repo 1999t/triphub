@@ -67,35 +67,7 @@ CREATE TABLE IF NOT EXISTS `trip_item` (
   KEY `idx_trip_item_day` (`trip_day_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='行程条目表';
 
--- 6. 秒杀活动表（SeckillActivity）
-CREATE TABLE IF NOT EXISTS `seckill_activity` (
-  `id`           BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键ID',
-  `title`        VARCHAR(100) NOT NULL                COMMENT '活动标题',
-  `place_id`     BIGINT       DEFAULT NULL            COMMENT '关联地点ID',
-  `stock`        INT          DEFAULT 0               COMMENT '库存',
-  `begin_time`   DATETIME     DEFAULT NULL            COMMENT '开始时间',
-  `end_time`     DATETIME     DEFAULT NULL            COMMENT '结束时间',
-  `status`       INT          DEFAULT 0               COMMENT '状态',
-  PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='限时秒杀活动表';
-
--- 7. 订单表（Order）
-CREATE TABLE IF NOT EXISTS `order` (
-  `id`                 BIGINT       NOT NULL           COMMENT '订单ID（全局唯一ID）',
-  `user_id`            BIGINT       NOT NULL           COMMENT '用户ID',
-  `trip_id`            BIGINT       DEFAULT NULL       COMMENT '关联行程ID',
-  `seckill_activity_id` BIGINT      DEFAULT NULL       COMMENT '关联秒杀活动ID',
-  `status`             INT          DEFAULT 0          COMMENT '0待支付 1已支付 2已取消 3进行中 4已完成',
-  `amount`             DECIMAL(10,2) DEFAULT NULL      COMMENT '订单金额',
-  `order_time`         DATETIME     DEFAULT CURRENT_TIMESTAMP COMMENT '下单时间',
-  `pay_time`           DATETIME     DEFAULT NULL       COMMENT '支付时间',
-  `cancel_time`        DATETIME     DEFAULT NULL       COMMENT '取消时间',
-  PRIMARY KEY (`id`),
-  KEY `idx_order_user` (`user_id`),
-  KEY `idx_order_activity` (`seckill_activity_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='订单表';
-
--- 8. 用户画像表（UserProfile），用于存储可扩展的画像 JSON
+-- 6. 用户画像表（UserProfile），用于存储可扩展的画像 JSON
 CREATE TABLE IF NOT EXISTS `user_profile` (
   `id`           BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键ID',
   `user_id`      BIGINT       NOT NULL                COMMENT '用户ID',
@@ -108,7 +80,7 @@ CREATE TABLE IF NOT EXISTS `user_profile` (
   UNIQUE KEY `uk_user_profile_user` (`user_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户画像表';
 
--- 9. 行程收藏表（TripFavorite），记录用户收藏的行程
+-- 7. 行程收藏表（TripFavorite），记录用户收藏的行程
 CREATE TABLE IF NOT EXISTS `trip_favorite` (
   `id`          BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键ID',
   `user_id`     BIGINT       NOT NULL                COMMENT '用户ID',

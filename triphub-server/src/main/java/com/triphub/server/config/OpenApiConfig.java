@@ -23,7 +23,7 @@ public class OpenApiConfig {
         return new OpenAPI()
                 .info(new Info()
                         .title("TripHub 后端接口文档")
-                        .description("TripHub 行程管理 + 秒杀 + AI 推荐 Demo 项目的后端 API 文档")
+                        .description("TripHub 行程管理 + AI 行程规划与推荐 Demo 项目的后端 API 文档")
                         .version("v1"))
                 .servers(Collections.singletonList(
                         new Server().url("/").description("默认服务端")

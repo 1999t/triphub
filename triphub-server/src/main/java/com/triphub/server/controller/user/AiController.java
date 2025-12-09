@@ -4,19 +4,17 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.triphub.common.context.BaseContext;
 import com.triphub.common.result.Result;
+import com.triphub.server.ai.TripPlanOrchestrator;
 import com.triphub.pojo.dto.TripAiPlanRequestDTO;
 import com.triphub.pojo.dto.AiAssistantRequestDTO;
-import com.triphub.pojo.entity.Trip;
 import com.triphub.pojo.entity.UserProfile;
 import com.triphub.pojo.vo.AiTripPlanVO;
 import com.triphub.server.service.TripService;
 import com.triphub.server.service.UserProfileService;
 import com.triphub.server.service.TripFavoriteService;
 import com.triphub.server.utils.AiClient;
-import com.triphub.server.limit.SimpleRateLimiter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -24,11 +22,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.time.LocalDate;
 import java.util.Collections;
-import java.util.List;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
 
 /**
  * AI 相关接口（RAG 味道 Demo，无向量库版本）。
@@ -48,8 +43,7 @@ public class AiController {
     private final TripFavoriteService tripFavoriteService;
     private final ObjectMapper objectMapper;
     private final AiClient aiClient;
-    private final StringRedisTemplate stringRedisTemplate;
-    private final SimpleRateLimiter simpleRateLimiter;
+    private final TripPlanOrchestrator tripPlanOrchestrator;
 
     /**
      * AI 行程规划接口：生成行程解释文案并创建一条 Trip 记录。
@@ -61,66 +55,27 @@ public class AiController {
         if (userId == null) {
             return Result.error("未登录或 token 无效");
         }
-        if (dto == null || !StringUtils.hasText(dto.getDestinationCity())
-                || dto.getDays() == null || dto.getDays() <= 0) {
-            return Result.error("目的地或天数不能为空");
+
+        log.info("AI 行程规划请求: userId={}, destinationCity={}, days={}, idempotencyKey={}",
+                userId,
+                dto != null ? dto.getDestinationCity() : null,
+                dto != null ? dto.getDays() : null,
+                idempotencyKey);
+
+        TripPlanOrchestrator.OrchestratorResponse resp = tripPlanOrchestrator.run(dto, idempotencyKey);
+        if (!"DONE".equals(resp.getStatus()) || resp.getFinalResult() == null) {
+            String msg = resp.getErrorMessage();
+            if (!StringUtils.hasText(msg)) {
+                msg = "AI 行程规划失败，请稍后重试";
+            }
+            log.warn("AI 行程规划失败: userId={}, status={}, checkerState={}, report={}, error={}",
+                    userId, resp.getStatus(), resp.getCheckerState(), resp.getReport(), resp.getErrorMessage());
+            return Result.error(msg);
         }
-
-        // 简单的按用户限流：同一用户 60 秒内最多调用 10 次 AI 行程规划
-        boolean allowed = simpleRateLimiter.tryAcquire("ai:trip-plan:user", String.valueOf(userId), 60, 10);
-        if (!allowed) {
-            return Result.error("AI 请求过于频繁，请稍后再试");
-        }
-
-        // 如果带了幂等 Key，先尝试从 Redis 读取之前的结果，避免重复创建行程和多次计费
-        AiTripPlanVO idempotentVo = tryLoadIdempotentResult(idempotencyKey);
-        if (idempotentVo != null) {
-            return Result.success(idempotentVo);
-        }
-
-        // 加载当前用户画像 JSON，如果存在则反序列化为 Map。
-        UserProfile profile = userProfileService.getByUserId(userId);
-        Map<String, Object> profileMap = parseProfile(profile);
-
-        // 构造一个简单的 Trip 实体（仅包含基本骨架，后续可在前端继续按天编辑）。
-        Trip trip = new Trip();
-        trip.setUserId(userId);
-        trip.setDestinationCity(dto.getDestinationCity());
-        trip.setDays(dto.getDays());
-
-        LocalDate startDate = dto.getStartDate();
-        if (startDate != null) {
-            trip.setStartDate(startDate);
-            trip.setEndDate(startDate.plusDays(dto.getDays() - 1L));
-        }
-
-        String tagSummary = extractTopTagName(profileMap);
-        if (StringUtils.hasText(tagSummary)) {
-            trip.setTitle(dto.getDestinationCity() + " " + dto.getDays() + "日" + tagSummary + "行（AI推荐）");
-        } else {
-            trip.setTitle(dto.getDestinationCity() + " " + dto.getDays() + "日行（AI推荐）");
-        }
-
-        // 为了演示方便，默认创建为私有行程，后续如需公开可由客户端修改。
-        trip.setVisibility(0);
-        tripService.save(trip);
-
-        // 查询用户最近收藏的行程，用于丰富 AI 解释的上下文。
-        String recentFavoritesJson = buildRecentFavoritesJson(userId);
-
-        // 调用外部大模型生成本次行程的解释文案。
-        log.info("AI 行程规划开始: userId={}, destinationCity={}, days={}, topTag={}",
-                userId, dto.getDestinationCity(), dto.getDays(), tagSummary);
-        String explanation = callLlmForExplanation(profileMap, dto.getDestinationCity(), dto.getDays(), tagSummary, recentFavoritesJson);
-        log.info("AI 行程规划结束: userId={}, tripId={}, hasExplanation={}",
-                userId, trip.getId(), StringUtils.hasText(explanation));
-
-        AiTripPlanVO vo = new AiTripPlanVO();
-        vo.setTrip(trip);
-        vo.setExplanation(explanation);
-
-        // 将本次结果按 Idempotency-Key 写入 Redis，方便后续相同 Key 的请求直接复用
-        cacheIdempotentResult(idempotencyKey, vo);
+        AiTripPlanVO vo = resp.getFinalResult();
+        Long tripId = vo != null && vo.getTrip() != null ? vo.getTrip().getId() : null;
+        log.info("AI 行程规划成功: userId={}, tripId={}, checkerState={}, report={}",
+                userId, tripId, resp.getCheckerState(), resp.getReport());
         return Result.success(vo);
     }
 
@@ -191,79 +146,6 @@ public class AiController {
         }
     }
 
-    @SuppressWarnings("unchecked")
-    private String extractTopTagName(Map<String, Object> profileMap) {
-        if (profileMap == null) {
-            return null;
-        }
-        Object tagsObj = profileMap.get("tags");
-        if (!(tagsObj instanceof List)) {
-            return null;
-        }
-        List<Object> tags = (List<Object>) tagsObj;
-        String bestName = null;
-        int bestWeight = -1;
-        for (Object t : tags) {
-            if (!(t instanceof Map)) {
-                continue;
-            }
-            Map<String, Object> tag = (Map<String, Object>) t;
-            Object weightObj = tag.get("weight");
-            int weight = weightObj instanceof Number ? ((Number) weightObj).intValue() : 0;
-            if (weight > bestWeight) {
-                bestWeight = weight;
-                Object nameObj = tag.get("name");
-                bestName = nameObj == null ? null : String.valueOf(nameObj);
-            }
-        }
-        return bestName;
-    }
-
-    private String callLlmForExplanation(Map<String, Object> profileMap,
-                                         String city,
-                                         Integer days,
-                                         String topTagName,
-                                         String recentFavoritesJson) {
-        String systemPrompt = "You are a travel planning assistant. "
-                + "Given a user's travel preferences and a rough trip request, "
-                + "you should generate a short, friendly explanation (2~3 sentences) "
-                + "about why this trip plan matches the user's interests.";
-
-        StringBuilder userPrompt = new StringBuilder();
-        userPrompt.append("User profile (JSON): ").append(safeToJson(profileMap)).append("\n");
-        if (StringUtils.hasText(recentFavoritesJson)) {
-            userPrompt.append("User recent favorite trips (JSON): ")
-                    .append(recentFavoritesJson)
-                    .append("\n");
-        }
-        userPrompt.append("Destination city: ").append(city).append("\n");
-        userPrompt.append("Days: ").append(days).append("\n");
-        if (StringUtils.hasText(topTagName)) {
-            userPrompt.append("Top interest tag name: ").append(topTagName).append("\n");
-        }
-        userPrompt.append("Please answer in Chinese, and only output the explanation text without any extra formatting.");
-
-        String explanation = aiClient.chat(systemPrompt, userPrompt.toString());
-        if (!StringUtils.hasText(explanation)) {
-            // 如果大模型不可用，则回退为本地拼接的一段简单中文解释。
-            StringBuilder sb = new StringBuilder();
-            sb.append("本行程是根据你的基础出行偏好生成的");
-            if (StringUtils.hasText(topTagName)) {
-                sb.append("，特别考虑了你对「").append(topTagName).append("」的兴趣");
-            }
-            if (StringUtils.hasText(city)) {
-                sb.append("，规划了一个为期 ").append(days).append(" 天的 ").append(city).append(" 行程");
-            }
-            Object budget = profileMap == null ? null : profileMap.get("budget");
-            if (budget != null) {
-                sb.append("，并参考了你偏好的预算区间：").append(budget);
-            }
-            sb.append("。");
-            return sb.toString();
-        }
-        return explanation;
-    }
-
     /**
      * 构造当前用户最近收藏行程的精简 JSON，用于作为 LLM 的参考上下文。
      */
@@ -293,42 +175,6 @@ public class AiController {
         } catch (Exception e) {
             // 画像增强失败不影响主流程
             return null;
-        }
-    }
-
-    /**
-     * 幂等性：尝试根据 Idempotency-Key 从 Redis 读取历史 AI 行程规划结果。
-     */
-    private AiTripPlanVO tryLoadIdempotentResult(String idempotencyKey) {
-        if (!StringUtils.hasText(idempotencyKey)) {
-            return null;
-        }
-        try {
-            String key = "ai:idemp:trip-plan:" + idempotencyKey;
-            String json = stringRedisTemplate.opsForValue().get(key);
-            if (!StringUtils.hasText(json)) {
-                return null;
-            }
-            return objectMapper.readValue(json, AiTripPlanVO.class);
-        } catch (Exception e) {
-            log.warn("读取 AI 幂等结果失败, key={}", idempotencyKey, e);
-            return null;
-        }
-    }
-
-    /**
-     * 幂等性：将本次 AI 行程规划结果缓存到 Redis，避免同一 Idempotency-Key 重复创建行程和调用 LLM。
-     */
-    private void cacheIdempotentResult(String idempotencyKey, AiTripPlanVO vo) {
-        if (!StringUtils.hasText(idempotencyKey) || vo == null) {
-            return;
-        }
-        try {
-            String key = "ai:idemp:trip-plan:" + idempotencyKey;
-            String json = objectMapper.writeValueAsString(vo);
-            stringRedisTemplate.opsForValue().set(key, json, 10, TimeUnit.MINUTES);
-        } catch (Exception e) {
-            log.warn("写入 AI 幂等结果失败, key={}", idempotencyKey, e);
         }
     }
 

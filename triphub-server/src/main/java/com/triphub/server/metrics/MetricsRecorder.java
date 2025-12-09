@@ -45,28 +45,6 @@ public class MetricsRecorder {
         }
     }
 
-    /**
-     * 记录秒杀 Lua 预检结果。
-     *
-     * @param result 0=成功，1=库存不足，2=重复下单
-     */
-    public void recordSeckillPrecheckResult(long result) {
-        try {
-            String outcome;
-            if (result == 0L) {
-                outcome = "success";
-            } else if (result == 1L) {
-                outcome = "stock_not_enough";
-            } else if (result == 2L) {
-                outcome = "repeat_order";
-            } else {
-                outcome = "unknown";
-            }
-            meterRegistry.counter("triphub.seckill.precheck", "outcome", outcome).increment();
-        } catch (Exception e) {
-            log.debug("记录秒杀预检指标失败: {}", e.getMessage());
-        }
-    }
 }
 
 

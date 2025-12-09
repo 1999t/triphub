@@ -33,7 +33,6 @@
         <mybatis.plus.version>3.4.3</mybatis.plus.version>
         <druid.version>1.2.8</druid.version>
         <knife4j.version>3.0.2</knife4j.version>
-        <redisson.version>3.13.6</redisson.version>
         <jjwt.version>0.9.1</jjwt.version>
         <poi.version>3.16</poi.version>
     </properties>
@@ -65,11 +64,6 @@
                 <version>${knife4j.version}</version>
             </dependency>
 
-            <dependency>
-                <groupId>org.redisson</groupId>
-                <artifactId>redisson</artifactId>
-                <version>${redisson.version}</version>
-            </dependency>
 
             <dependency>
                 <groupId>io.jsonwebtoken</groupId>
