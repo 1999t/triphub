@@ -1,6 +1,6 @@
 ## TripHub 架构与核心流程概览
 
-> 面向开发者与新同学，快速理解 TripHub 的整体架构与关键业务流程（JWT 登录、行程缓存、热门榜单、秒杀预检 + MQ）。
+> 面向开发者与新同学，快速理解 TripHub 的整体架构与关键业务流程（JWT 登录、行程缓存、热门榜单、用户画像与 AI 推荐）。
 
 ### 1. 整体架构
 
@@ -8,7 +8,6 @@
   - Spring Boot 2.7.x
   - MyBatis-Plus 作为 ORM
   - Redis 作为缓存与热点数据存储
-  - RabbitMQ 用于异步下单
   - Redisson 提供分布式锁能力
 
 - **模块划分**
@@ -17,13 +16,10 @@
   - `triphub-server`：业务服务（Controller / Service / Mapper / Utils）
 
 - **核心中间件角色**
-  - **MySQL**：持久化业务数据（用户、行程、秒杀活动、订单等）
+  - **MySQL**：持久化业务数据（用户、行程、收藏、用户画像等）
   - **Redis**：
     - 行程缓存（`cache:trip:{id}`）
     - 热门榜单（`hot:trip`、`hot:dest`）
-    - 秒杀库存与一人一单状态（`seckill:stock:{id}`、`seckill:order:{id}`）
-  - **RabbitMQ**：
-    - 秒杀下单异步写库，削峰填谷
 
 ### 2. JWT 登录流程
 
@@ -79,41 +75,15 @@
   - `GET /user/discover/hot-trips`：从 `hot:trip` 取 Top N，再批量查 Trip 详情。
   - `GET /user/discover/hot-destinations`：从 `hot:dest` 取 Top N，直接返回城市名列表。
 
-### 5. 秒杀预检 + MQ 异步下单流程
+### 5. 用户画像与 AI 行程推荐（概要）
 
-> 核心目标：在高并发场景下，保证库存准确、一人一单、接口快速返回。
-
-1. **请求入口**
-   - `POST /user/seckill/{activityId}`。
-   - 从 `BaseContext` 获取当前用户 ID。
-
-2. **Redis + Lua 预检**
-   - Key：
-     - `seckill:stock:{activityId}`：库存
-     - `seckill:order:{activityId}`：已下单用户集合
-   - 步骤：
-     1. 读取库存，若 `<= 0` → 返回错误「Seckill stock is not enough」；
-     2. 检查用户是否已在 Set 中，若存在 → 返回错误「User has already placed an order for this activity」；
-     3. 使用 `DECR` 扣减库存，并 `SADD` 写入用户 ID；
-     4. 返回 `0` 表示通过。
-
-3. **消息入队**
-   - 通过 `RedisIdWorker.nextId("order")` 生成全局唯一订单 ID；
-   - 封装消息（`orderId`, `userId`, `activityId` 等）发送到：
-     - 交换机：`TRIPHUB_EXCHANGE`
-     - 路由键：`seckill`
-     - 队列：`TRIPHUB_SECKILL_QUEUE`
-
-4. **MQ 消费与落单**
-   - 监听器：`SeckillOrderListener`；
-   - 使用 Redisson 分布式锁：`lock:seckill:order:{userId}` 保证用户维度的串行消费；
-   - 再次查询 DB 确认一人一单；
-   - 插入 `order` 表记录；
-   - 基于乐观方式扣减 `seckill_activity.stock`。
-
-5. **失败与重试**
-   - 消费失败时，根据 MQ 配置进入重试或死信队列；
-   - 需要结合业务日志排查根因，避免出现「Redis 已扣减但 DB 长期未落单」的情况。
+1. 用户通过 `/user/profile` 保存画像 JSON（兴趣标签、预算、出行天数、风格等）。
+2. 行程收藏行为通过 `trip_favorite` 表进行统计，反哺到画像中，例如偏好城市。
+3. AI 行程规划 `POST /user/ai/trip-plan`：
+   - 读取当前用户画像与请求中的目的地、天数等参数；
+   - 构造 Trip 草稿，并调用外部 LLM 生成「为什么这条行程适合你」的解释文案；
+   - 将生成结果写入 Trip 表并返回给前端。
+4. 推荐接口可以结合 Redis 热门榜单、收藏统计与用户画像做规则打分，再将候选行程 + 画像信息作为上下文喂给 LLM，生成带理由的推荐列表。
 
 ### 6. 对新人快速上手的建议
 
@@ -121,10 +91,8 @@
   1. `TripHub代码开发规划.md`（整体开发规则）
   2. 本文（架构与流程）
   3. `docs/auth/login.md` 与 `docs/trip/*.md`（最常用接口）
-  4. `docs/seckill/*.md`（高并发特性模块）
 - 搭环境时优先保证：
-  - MySQL / Redis / RabbitMQ 都已启动；
-  - `db/init_triphub.sql` 已执行；
-  - `script/init_seckill.sh` 能够顺利跑通。
+  - MySQL / Redis 都已启动；
+  - `db/init_triphub.sql` 已执行。
 
 

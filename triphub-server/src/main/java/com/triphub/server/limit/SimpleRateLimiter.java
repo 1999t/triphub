@@ -28,7 +28,7 @@ public class SimpleRateLimiter {
     /**
      * 在给定时间窗口内做简单的计数限流。
      *
-     * @param bizKey       业务前缀，例如 sendCode:ip、sendCode:phone、seckill:user
+     * @param bizKey       业务前缀，例如 sendCode:ip、sendCode:phone、trip:user
      * @param identify     限流维度标识，如 IP 地址、手机号、userId
      * @param windowSecond 时间窗口（秒）
      * @param maxCount     窗口内允许的最大次数

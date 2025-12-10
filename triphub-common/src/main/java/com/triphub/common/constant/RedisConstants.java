@@ -20,15 +20,6 @@ public class RedisConstants {
     /** 热门目的地 ZSet key */
     public static final String HOT_DEST_ZSET = "hot:dest";
 
-    /** 秒杀库存 key 前缀 seckill:stock:activityId */
-    public static final String SECKILL_STOCK_KEY = "seckill:stock:";
-
-    /** 秒杀下单用户集合 key 前缀 seckill:order:activityId */
-    public static final String SECKILL_ORDER_KEY = "seckill:order:";
-
-    /** 秒杀下单分布式锁前缀 lock:seckill:order:userId */
-    public static final String LOCK_SECKILL_ORDER = "lock:seckill:order:";
-
     /** 缓存空值 TTL（分钟） */
     public static final long CACHE_NULL_TTL = 2L;
 

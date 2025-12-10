@@ -471,52 +471,6 @@
         "response": []
       },
       {
-        "name": "秒杀-下单 /user/seckill/{activityId}",
-        "request": {
-          "method": "POST",
-          "header": [
-            {
-              "key": "token",
-              "value": "{{userToken}}"
-            }
-          ],
-          "url": {
-            "raw": "{{baseUrl}}/user/seckill/1",
-            "host": [
-              "{{baseUrl}}"
-            ],
-            "path": [
-              "user",
-              "seckill",
-              "1"
-            ]
-          }
-        },
-        "response": [],
-        "event": [
-          {
-            "listen": "test",
-            "script": {
-              "type": "text/javascript",
-              "exec": [
-                "// store returned seckill orderId for debugging",
-                "if (pm.response.code === 200) {",
-                "  try {",
-                "    var res = pm.response.json();",
-                "    if (res && res.code === 0 && res.data) {",
-                "      pm.collectionVariables.set('seckillOrderId', res.data);",
-                "      console.log('seckillOrderId set to collection variables');",
-                "    }",
-                "  } catch (e) {",
-                "    console.log('parse response error', e);",
-                "  }",
-                "}"
-              ]
-            }
-          }
-        ]
-      },
-      {
         "name": "画像-获取当前用户画像 /user/profile",
         "request": {
           "method": "GET",
