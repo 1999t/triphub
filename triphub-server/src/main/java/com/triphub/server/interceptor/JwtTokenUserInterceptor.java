@@ -1,11 +1,13 @@
 package com.triphub.server.interceptor;
 
 import com.triphub.common.context.BaseContext;
+import com.triphub.common.constant.RedisConstants;
 import com.triphub.common.properties.JwtProperties;
 import com.triphub.common.utils.JwtUtil;
 import io.jsonwebtoken.Claims;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.slf4j.MDC;
 import org.springframework.stereotype.Component;
 import org.springframework.web.method.HandlerMethod;
@@ -20,6 +22,7 @@ import javax.servlet.http.HttpServletResponse;
 public class JwtTokenUserInterceptor implements HandlerInterceptor {
 
     private final JwtProperties jwtProperties;
+    private final StringRedisTemplate stringRedisTemplate;
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
@@ -42,6 +45,14 @@ public class JwtTokenUserInterceptor implements HandlerInterceptor {
                 BaseContext.setCurrentId(userId);
                 // 将 userId 写入 MDC，便于后续日志统一输出
                 MDC.put("userId", String.valueOf(userId));
+            }
+
+            // 进一步校验服务端登录态是否还有效（token 是否在 Redis 中存在）
+            String loginKey = RedisConstants.LOGIN_USER_KEY + token;
+            Boolean exists = stringRedisTemplate.hasKey(loginKey);
+            if (Boolean.FALSE.equals(exists)) {
+                response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                return false;
             }
             return true;
         } catch (Exception e) {

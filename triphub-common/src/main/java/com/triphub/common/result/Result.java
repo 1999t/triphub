@@ -20,15 +20,23 @@ public class Result<T> {
 
     public static <T> Result<T> success(T data) {
         Result<T> r = new Result<>();
-        r.setCode(0);
-        r.setMsg("ok");
+        r.setCode(ErrorCode.SUCCESS.getCode());
+        r.setMsg(ErrorCode.SUCCESS.getMsg());
         r.setData(data);
         return r;
     }
 
     public static <T> Result<T> error(String msg) {
+        return error(ErrorCode.COMMON_ERROR.getCode(), msg);
+    }
+
+    public static <T> Result<T> error(ErrorCode errorCode) {
+        return error(errorCode.getCode(), errorCode.getMsg());
+    }
+
+    public static <T> Result<T> error(int code, String msg) {
         Result<T> r = new Result<>();
-        r.setCode(1);
+        r.setCode(code);
         r.setMsg(msg);
         r.setData(null);
         return r;

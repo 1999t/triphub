@@ -5,6 +5,12 @@ public class RedisConstants {
     private RedisConstants() {
     }
 
+    /** 登录验证码前缀 login:code:phone */
+    public static final String LOGIN_CODE_KEY = "login:code:";
+
+    /** 登录验证码 TTL（分钟） */
+    public static final long LOGIN_CODE_TTL = 5L;
+
     /** 登录用户信息前缀 login:user:token */
     public static final String LOGIN_USER_KEY = "login:user:";
 

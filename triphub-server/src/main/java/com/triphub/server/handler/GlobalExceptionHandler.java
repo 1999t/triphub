@@ -1,6 +1,7 @@
 package com.triphub.server.handler;
 
 import com.triphub.common.exception.BaseException;
+import com.triphub.common.result.ErrorCode;
 import com.triphub.common.result.Result;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DuplicateKeyException;
@@ -16,7 +17,11 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(BaseException.class)
     public Result<Void> handleBaseException(BaseException ex) {
         log.error("业务异常: {}", ex.getMessage());
-        return Result.error(ex.getMessage());
+        Integer code = ex.getCode();
+        if (code == null) {
+            return Result.error(ex.getMessage());
+        }
+        return Result.error(code, ex.getMessage());
     }
 
     @ExceptionHandler({SQLIntegrityConstraintViolationException.class, DuplicateKeyException.class})
@@ -37,7 +42,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class)
     public Result<Void> handleOtherException(Exception ex) {
         log.error("系统异常", ex);
-        return Result.error("系统异常，请稍后重试");
+        return Result.error(ErrorCode.COMMON_ERROR.getCode(), "系统异常，请稍后重试");
     }
 }
 
