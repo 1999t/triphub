@@ -49,6 +49,16 @@ public class TripController {
         if (userId == null) {
             return Result.error("未登录或 token 无效");
         }
+        if (trip == null) {
+            return Result.error("参数错误");
+        }
+        // visibility 收敛为两档：0=私有，2=公开；不做好友功能，1 直接判非法
+        Integer visibility = trip.getVisibility();
+        if (visibility == null) {
+            trip.setVisibility(2); // 默认公开
+        } else if (visibility != 0 && visibility != 2) {
+            return Result.error("visibility 非法：仅支持 0(私有) 或 2(公开)");
+        }
         trip.setUserId(userId);
         tripService.save(trip);
         return Result.success(trip.getId());
@@ -59,11 +69,23 @@ public class TripController {
      */
     @GetMapping("/{id}")
     public Result<Trip> getTrip(@PathVariable("id") Long id) {
+        Long userId = BaseContext.getCurrentId();
         Trip trip = tripService.queryTripById(id);
         if (trip == null) {
             return Result.error("行程不存在");
         }
-        // 增加浏览量并写入热门行程榜单相关的 Redis ZSet
+
+        // 可见性校验（KISS）：
+        // - visibility == 2（或为空视为公开）：所有登录用户可见
+        // - visibility != 2：当前项目无好友关系模型，统一收敛为“仅作者可见”
+        Integer visibility = trip.getVisibility();
+        boolean isPublic = (visibility == null || visibility == 2);
+        boolean isOwner = (userId != null && userId.equals(trip.getUserId()));
+        if (!isPublic && !isOwner) {
+            return Result.error("无权访问该行程");
+        }
+
+        // 增加浏览量，并在公开行程时写入热门榜单 Redis ZSet（见 TripServiceImpl 过滤逻辑）
         tripService.increaseViewCountAndHotScore(trip);
         return Result.success(trip);
     }
