@@ -26,6 +26,12 @@ public class RedisConstants {
     /** 热门目的地 ZSet key */
     public static final String HOT_DEST_ZSET = "hot:dest";
 
+    /** 行程浏览量增量 Hash key（field=tripId, value=delta） */
+    public static final String TRIP_VIEW_COUNT_DELTA_HASH = "trip:view:delta";
+
+    /** 行程浏览量增量 Hash key TTL（小时） */
+    public static final long TRIP_VIEW_COUNT_DELTA_TTL_HOURS = 48L;
+
     /** 缓存空值 TTL（分钟） */
     public static final long CACHE_NULL_TTL = 2L;
 

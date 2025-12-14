@@ -79,6 +79,7 @@ public class TripController {
             return Result.error("未登录或 token 无效");
         }
         Page<Trip> p = new Page<>(page, size);
+        @SuppressWarnings("unchecked")
         LambdaQueryWrapper<Trip> wrapper = new LambdaQueryWrapper<Trip>()
                 .eq(Trip::getUserId, userId)
                 .orderByDesc(Trip::getCreateTime);
@@ -120,6 +121,7 @@ public class TripController {
         if (day != null) {
             vo.setId(day.getId());
             vo.setNote(day.getNote());
+            @SuppressWarnings("unchecked")
             List<TripItem> items = tripItemService.list(new LambdaQueryWrapper<TripItem>()
                     .eq(TripItem::getTripDayId, day.getId())
                     .orderByAsc(TripItem::getStartTime)

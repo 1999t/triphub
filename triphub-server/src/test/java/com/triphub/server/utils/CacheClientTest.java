@@ -10,6 +10,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 
+import java.time.LocalDateTime;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 
@@ -42,7 +43,8 @@ class CacheClientTest {
 
     @BeforeEach
     void setUp() {
-        objectMapper = new ObjectMapper();
+        // 与 Spring Boot 默认行为对齐：支持 Java Time（LocalDateTime）序列化/反序列化
+        objectMapper = new ObjectMapper().findAndRegisterModules();
         when(stringRedisTemplate.opsForValue()).thenReturn(valueOperations);
         cacheClient = new CacheClient(stringRedisTemplate, objectMapper, metricsRecorder);
     }
@@ -91,6 +93,67 @@ class CacheClientTest {
         assertNull(result);
         // 数据库返回 null 时，会写入空字符串并设置短 TTL，防止缓存穿透
         verify(valueOperations).set(eq(keyPrefix + id), eq(""), eq(3L), eq(TimeUnit.MINUTES));
+    }
+
+    @Test
+    void queryWithLogicalExpire_shouldReturnNull_whenHitNullCache() {
+        String keyPrefix = "cache:test:";
+        Long id = 3L;
+        when(valueOperations.get(keyPrefix + id)).thenReturn("");
+
+        Function<Long, TestDto> dbFallback = unused -> {
+            throw new IllegalStateException("dbFallback should not be called when hit null-cache");
+        };
+
+        TestDto result = cacheClient.queryWithLogicalExpire(
+                keyPrefix, id, TestDto.class, dbFallback,
+                10, TimeUnit.MINUTES, "lock:test:"
+        );
+        assertNull(result);
+    }
+
+    @Test
+    void queryWithLogicalExpire_shouldCacheNullWithShortTtl_whenCacheMissAndDbReturnsNull() {
+        String keyPrefix = "cache:test:";
+        Long id = 4L;
+        when(valueOperations.get(keyPrefix + id)).thenReturn(null);
+
+        Function<Long, TestDto> dbFallback = unused -> null;
+
+        TestDto result = cacheClient.queryWithLogicalExpire(
+                keyPrefix, id, TestDto.class, dbFallback,
+                10, TimeUnit.MINUTES, "lock:test:"
+        );
+
+        assertNull(result);
+        verify(valueOperations).set(eq(keyPrefix + id), eq(""), eq(2L), eq(TimeUnit.MINUTES));
+    }
+
+    @Test
+    void queryWithLogicalExpire_shouldReturnCachedValue_whenNotExpired() throws Exception {
+        String keyPrefix = "cache:test:";
+        Long id = 5L;
+        TestDto dto = new TestDto();
+        dto.setId(id);
+        dto.setName("cached");
+
+        // 构造逻辑过期缓存：expireTime 在未来
+        com.triphub.common.redis.RedisData redisData = new com.triphub.common.redis.RedisData();
+        redisData.setData(dto);
+        redisData.setExpireTime(LocalDateTime.now().plusMinutes(10));
+        String json = objectMapper.writeValueAsString(redisData);
+        when(valueOperations.get(keyPrefix + id)).thenReturn(json);
+
+        Function<Long, TestDto> dbFallback = unused -> {
+            throw new IllegalStateException("dbFallback should not be called when cache not expired");
+        };
+
+        TestDto result = cacheClient.queryWithLogicalExpire(
+                keyPrefix, id, TestDto.class, dbFallback,
+                10, TimeUnit.MINUTES, "lock:test:"
+        );
+        assertEquals(id, result.getId());
+        assertEquals("cached", result.getName());
     }
 
     /**

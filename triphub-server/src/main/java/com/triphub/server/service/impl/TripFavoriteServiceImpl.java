@@ -3,6 +3,7 @@ package com.triphub.server.service.impl;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.triphub.common.constant.RedisConstants;
 import com.triphub.pojo.entity.Trip;
 import com.triphub.pojo.entity.TripFavorite;
 import com.triphub.pojo.entity.UserProfile;
@@ -12,10 +13,13 @@ import com.triphub.server.service.TripService;
 import com.triphub.server.service.UserProfileService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
 
 import java.util.*;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 
 /**
@@ -35,6 +39,13 @@ public class TripFavoriteServiceImpl extends ServiceImpl<TripFavoriteMapper, Tri
     private final TripService tripService;
     private final UserProfileService userProfileService;
     private final ObjectMapper objectMapper;
+    private final StringRedisTemplate stringRedisTemplate;
+
+    /**
+     * 收藏 stats 重建是 O(n) 的扫描操作，放到异步线程里避免阻塞主请求。
+     * 这里保持 KISS：最终一致即可。
+     */
+    private static final ExecutorService FAVORITE_STATS_EXECUTOR = Executors.newFixedThreadPool(2);
 
     @Override
     public boolean addFavorite(Long userId, Long tripId) {
@@ -61,8 +72,11 @@ public class TripFavoriteServiceImpl extends ServiceImpl<TripFavoriteMapper, Tri
                 .eq("id", tripId)
                 .update();
 
-        // 重算画像统计字段
-        rebuildProfileStats(userId);
+        // 写后删缓存：like_count 会影响 Trip 详情展示（如果详情包含 likeCount）
+        stringRedisTemplate.delete(RedisConstants.CACHE_TRIP_KEY + tripId);
+
+        // 重算画像统计字段（异步，最终一致）
+        rebuildProfileStatsAsync(userId);
         return true;
     }
 
@@ -88,11 +102,15 @@ public class TripFavoriteServiceImpl extends ServiceImpl<TripFavoriteMapper, Tri
                 .eq("id", tripId)
                 .update();
 
-        rebuildProfileStats(userId);
+        // 写后删缓存：like_count 变化后失效详情缓存
+        stringRedisTemplate.delete(RedisConstants.CACHE_TRIP_KEY + tripId);
+
+        rebuildProfileStatsAsync(userId);
         return true;
     }
 
     @Override
+    @SuppressWarnings("unchecked")
     public List<TripFavorite> listRecentFavorites(Long userId, int limit) {
         if (userId == null || limit <= 0) {
             return Collections.emptyList();
@@ -171,6 +189,13 @@ public class TripFavoriteServiceImpl extends ServiceImpl<TripFavoriteMapper, Tri
             // 统计失败不应该影响主业务逻辑，打印日志即可
             log.warn("重建用户收藏画像统计失败, userId={}", userId, e);
         }
+    }
+
+    private void rebuildProfileStatsAsync(Long userId) {
+        if (userId == null) {
+            return;
+        }
+        FAVORITE_STATS_EXECUTOR.submit(() -> rebuildProfileStats(userId));
     }
 
     @SuppressWarnings("unchecked")
