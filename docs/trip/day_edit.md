@@ -60,7 +60,6 @@
       "tripId": {{tripId}},
       "dayIndex": 1,
       "type": "FOOD",
-      "placeId": 1,
       "startTime": "10:00:00",
       "endTime": "12:00:00",
       "memo": "春熙路小吃打卡"
@@ -87,7 +86,6 @@
     {
       "id": {{tripItemId}},
       "type": "FOOD",
-      "placeId": 1,
       "startTime": "10:30:00",
       "endTime": "12:30:00",
       "memo": "调整为晚些出发"

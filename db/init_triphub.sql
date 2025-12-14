@@ -59,13 +59,15 @@ CREATE TABLE IF NOT EXISTS `trip_item` (
   `id`         BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键ID',
   `trip_day_id` BIGINT      NOT NULL                COMMENT '行程天ID',
   `type`       VARCHAR(20)  DEFAULT NULL            COMMENT 'SCENIC/HOTEL/FOOD/TRAFFIC',
-  `place_id`   BIGINT       DEFAULT NULL            COMMENT '地点ID',
   `start_time` TIME         DEFAULT NULL            COMMENT '开始时间',
   `end_time`   TIME         DEFAULT NULL            COMMENT '结束时间',
   `memo`       VARCHAR(255) DEFAULT NULL            COMMENT '备注',
   PRIMARY KEY (`id`),
   KEY `idx_trip_item_day` (`trip_day_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='行程条目表';
+
+-- 存量库迁移提示（如果你已经执行过旧版脚本）：
+-- ALTER TABLE trip_item DROP COLUMN place_id;
 
 -- 6. 用户画像表（UserProfile），用于存储可扩展的画像 JSON
 CREATE TABLE IF NOT EXISTS `user_profile` (

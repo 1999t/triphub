@@ -4,6 +4,8 @@ import com.triphub.common.context.BaseContext;
 import com.triphub.common.constant.RedisConstants;
 import com.triphub.common.properties.JwtProperties;
 import com.triphub.common.utils.JwtUtil;
+import com.triphub.common.result.Result;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.jsonwebtoken.Claims;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -15,6 +17,7 @@ import org.springframework.web.servlet.HandlerInterceptor;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+import java.nio.charset.StandardCharsets;
 
 @Component
 @RequiredArgsConstructor
@@ -23,6 +26,7 @@ public class JwtTokenUserInterceptor implements HandlerInterceptor {
 
     private final JwtProperties jwtProperties;
     private final StringRedisTemplate stringRedisTemplate;
+    private final ObjectMapper objectMapper;
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
@@ -33,8 +37,7 @@ public class JwtTokenUserInterceptor implements HandlerInterceptor {
         String tokenName = jwtProperties.getUserTokenName();
         String token = request.getHeader(tokenName);
         if (token == null || token.isEmpty()) {
-            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-            return false;
+            return unauthorized(response, "未登录或 token 缺失");
         }
 
         try {
@@ -51,20 +54,35 @@ public class JwtTokenUserInterceptor implements HandlerInterceptor {
             String loginKey = RedisConstants.LOGIN_USER_KEY + token;
             Boolean exists = stringRedisTemplate.hasKey(loginKey);
             if (Boolean.FALSE.equals(exists)) {
-                response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-                return false;
+                return unauthorized(response, "登录已过期，请重新登录");
             }
             return true;
         } catch (Exception e) {
             log.warn("用户 JWT 校验失败: {}", e.getMessage());
-            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-            return false;
+            return unauthorized(response, "未登录或 token 无效");
         }
     }
 
     @Override
     public void afterCompletion(HttpServletRequest request, HttpServletResponse response, Object handler, Exception ex) {
         BaseContext.clear();
+        MDC.remove("userId");
+    }
+
+    private boolean unauthorized(HttpServletResponse response, String msg) {
+        // 注意：preHandle 返回 false 时 afterCompletion 不一定会被调用，这里必须手动清理
+        BaseContext.clear();
+        MDC.remove("userId");
+
+        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+        response.setCharacterEncoding(StandardCharsets.UTF_8.name());
+        response.setContentType("application/json;charset=UTF-8");
+        try {
+            response.getWriter().write(objectMapper.writeValueAsString(Result.error(msg)));
+        } catch (Exception ignore) {
+            // ignore
+        }
+        return false;
     }
 }
 

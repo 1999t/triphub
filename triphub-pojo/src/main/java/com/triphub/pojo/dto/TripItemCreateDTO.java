@@ -25,11 +25,6 @@ public class TripItemCreateDTO {
      */
     private String type;
 
-    /**
-     * Related place ID (optional)
-     */
-    private Long placeId;
-
     private LocalTime startTime;
 
     private LocalTime endTime;

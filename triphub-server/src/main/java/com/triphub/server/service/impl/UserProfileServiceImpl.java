@@ -28,16 +28,8 @@ public class UserProfileServiceImpl extends ServiceImpl<UserProfileMapper, UserP
         if (userId == null) {
             return;
         }
-        UserProfile profile = getByUserId(userId);
-        if (profile == null) {
-            profile = new UserProfile();
-            profile.setUserId(userId);
-            profile.setProfileJson(profileJson);
-            save(profile);
-        } else {
-            profile.setProfileJson(profileJson);
-            updateById(profile);
-        }
+        // 直接走 DB Upsert，消除并发下 “先查再插/更” 的竞态
+        baseMapper.upsertProfile(userId, profileJson);
     }
 }
 

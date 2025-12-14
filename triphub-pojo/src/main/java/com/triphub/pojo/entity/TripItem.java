@@ -21,8 +21,6 @@ public class TripItem {
      */
     private String type;
 
-    private Long placeId;
-
     private LocalTime startTime;
 
     private LocalTime endTime;

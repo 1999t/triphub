@@ -212,7 +212,6 @@ public class TripController {
         TripItem item = new TripItem();
         item.setTripDayId(day.getId());
         item.setType(dto.getType());
-        item.setPlaceId(dto.getPlaceId());
         item.setStartTime(dto.getStartTime());
         item.setEndTime(dto.getEndTime());
         item.setMemo(dto.getMemo());
@@ -250,7 +249,6 @@ public class TripController {
         }
 
         item.setType(dto.getType());
-        item.setPlaceId(dto.getPlaceId());
         item.setStartTime(dto.getStartTime());
         item.setEndTime(dto.getEndTime());
         item.setMemo(dto.getMemo());

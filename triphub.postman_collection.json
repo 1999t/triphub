@@ -315,7 +315,7 @@
           ],
           "body": {
             "mode": "raw",
-            "raw": "{\n  \"tripId\": \"{{tripId}}\",\n  \"dayIndex\": 1,\n  \"type\": \"FOOD\",\n  \"placeId\": 1,\n  \"startTime\": \"10:00:00\",\n  \"endTime\": \"12:00:00\",\n  \"memo\": \"春熙路小吃打卡\"\n}"
+            "raw": "{\n  \"tripId\": \"{{tripId}}\",\n  \"dayIndex\": 1,\n  \"type\": \"FOOD\",\n  \"startTime\": \"10:00:00\",\n  \"endTime\": \"12:00:00\",\n  \"memo\": \"春熙路小吃打卡\"\n}"
           },
           "url": {
             "raw": "{{baseUrl}}/user/trip/item",
@@ -369,7 +369,7 @@
           ],
           "body": {
             "mode": "raw",
-            "raw": "{\n  \"id\": \"{{tripItemId}}\",\n  \"type\": \"FOOD\",\n  \"placeId\": 1,\n  \"startTime\": \"10:30:00\",\n  \"endTime\": \"12:30:00\",\n  \"memo\": \"调整为晚些出发\"\n}"
+            "raw": "{\n  \"id\": \"{{tripItemId}}\",\n  \"type\": \"FOOD\",\n  \"startTime\": \"10:30:00\",\n  \"endTime\": \"12:30:00\",\n  \"memo\": \"调整为晚些出发\"\n}"
           },
           "url": {
             "raw": "{{baseUrl}}/user/trip/item",
