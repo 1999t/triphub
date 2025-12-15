@@ -28,4 +28,10 @@ triphub:
     api-key: ${TRIPHUB_AI_API_KEY:}
     # Model name, e.g. gpt-4.1-mini or gpt-4o-mini
     model: ${TRIPHUB_AI_MODEL:gpt-4.1-mini}
+    # Connect timeout (ms)
+    connect-timeout-ms: ${TRIPHUB_AI_CONNECT_TIMEOUT_MS:1000}
+    # Request timeout (ms)
+    request-timeout-ms: ${TRIPHUB_AI_REQUEST_TIMEOUT_MS:5000}
+    # Retries for retriable errors (429/5xx/timeout), excluding the first attempt
+    max-retries: ${TRIPHUB_AI_MAX_RETRIES:1}
 

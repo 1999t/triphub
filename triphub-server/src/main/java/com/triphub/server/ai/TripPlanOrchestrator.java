@@ -23,6 +23,7 @@ import org.springframework.util.StringUtils;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -42,6 +43,11 @@ import java.util.concurrent.TimeUnit;
 @RequiredArgsConstructor
 @Slf4j
 public class TripPlanOrchestrator {
+
+    // Prompt/上下文治理：KISS 版本，优先防止“把 prompt 当垃圾桶”
+    private static final int MAX_PROFILE_JSON_CHARS = 2000;
+    private static final int MAX_FAVORITES_JSON_CHARS = 1200;
+    private static final int MAX_TITLE_CHARS = 40;
 
     private final TripService tripService;
     private final UserProfileService userProfileService;
@@ -96,18 +102,27 @@ public class TripPlanOrchestrator {
                             break;
                         }
 
-                        // 幂等性检查：若命中缓存，直接返回结果，不再进入行为树。
-                        AiTripPlanVO cached = tryLoadIdempotentResult(idempotencyKey);
-                        if (cached != null) {
-                            resp.setStatus("DONE");
-                            resp.setCheckerState("IDEMPOTENT_HIT");
-                            resp.setFinalResult(cached);
-                            resp.setReport("命中幂等缓存，本次未调用外部 LLM");
-                            state = TripPlanState.DONE;
-                        } else {
-                            resp.setCheckerState("READY");
-                            state = TripPlanState.PLAN_LOOP;
+                        // 幂等（KISS 版本）：
+                        // - key 绑定 userId，避免跨用户串单；
+                        // - 仅做结果缓存命中直返，不做 fingerprint/并发锁（按需再加）。
+                        if (StringUtils.hasText(idempotencyKey)) {
+                            String resKey = buildIdempotencyResKey(userId, idempotencyKey);
+                            ctx.setIdempotencyResKey(resKey);
+
+                            // 幂等性检查：若命中结果缓存，直接返回，不再进入行为树。
+                            AiTripPlanVO cached = tryLoadIdempotentResult(resKey);
+                            if (cached != null) {
+                                resp.setStatus("DONE");
+                                resp.setCheckerState("IDEMPOTENT_HIT");
+                                resp.setFinalResult(cached);
+                                resp.setReport("命中幂等缓存，本次未调用外部 LLM");
+                                state = TripPlanState.DONE;
+                                break;
+                            }
                         }
+
+                        resp.setCheckerState("READY");
+                        state = TripPlanState.PLAN_LOOP;
                     }
                     case PLAN_LOOP -> {
                         TripPlanStrategy strategy = buildStrategy(ctx);
@@ -123,7 +138,7 @@ public class TripPlanOrchestrator {
                     case SAVE_RESULT -> {
                         AiTripPlanVO vo = saveResultAndBuildVo(ctx);
                         ctx.setResultVo(vo);
-                        cacheIdempotentResult(ctx.getIdempotencyKey(), vo);
+                        cacheIdempotentResult(ctx.getIdempotencyResKey(), vo);
                         resp.setFinalResult(vo);
                         resp.setStatus("DONE");
                         if (!StringUtils.hasText(resp.getReport())) {
@@ -188,7 +203,10 @@ public class TripPlanOrchestrator {
                 resp.getRounds().add(roundRecord);
 
                 if (round == strategy.getMaxRetries() && strategy.isAllowDegradedResult()) {
-                    String fallback = buildLocalExplanation(ctx.getProfileMap(), destinationCity, days, tagSummary);
+                    String fallback = buildLocalExplanation(ctx.getProfileMap(),
+                            destinationCity, days, tagSummary,
+                            dto == null ? null : dto.getStartDate(),
+                            StringUtils.hasText(recentFavoritesJson));
                     ctx.setExplanation(fallback);
 
                     TripPlanRoundRecord fallbackRecord = new TripPlanRoundRecord();
@@ -219,7 +237,10 @@ public class TripPlanOrchestrator {
                 resp.setReport("LLM 生成解释通过 QA 校验");
                 return;
             } else if (round == strategy.getMaxRetries() && strategy.isAllowDegradedResult()) {
-                String fallback = buildLocalExplanation(ctx.getProfileMap(), destinationCity, days, tagSummary);
+                String fallback = buildLocalExplanation(ctx.getProfileMap(),
+                        destinationCity, days, tagSummary,
+                        dto == null ? null : dto.getStartDate(),
+                        StringUtils.hasText(recentFavoritesJson));
                 ctx.setExplanation(fallback);
 
                 TripPlanRoundRecord fallbackRecord = new TripPlanRoundRecord();
@@ -248,7 +269,7 @@ public class TripPlanOrchestrator {
 
         // 用户画像
         UserProfile profile = userProfileService.getByUserId(userId);
-        Map<String, Object> profileMap = parseProfile(profile);
+        Map<String, Object> profileMap = sanitizeProfileMap(parseProfile(profile));
         ctx.setProfileMap(profileMap);
         ctx.setColdUser(profileMap == null || profileMap.isEmpty());
 
@@ -329,10 +350,10 @@ public class TripPlanOrchestrator {
 
         StringBuilder userPrompt = new StringBuilder();
         userPrompt.append("Round: ").append(round).append("\n");
-        userPrompt.append("User profile (JSON): ").append(safeToJson(profileMap)).append("\n");
+        userPrompt.append("User profile (JSON): ").append(safeToJsonWithLimit(profileMap, MAX_PROFILE_JSON_CHARS)).append("\n");
         if (StringUtils.hasText(recentFavoritesJson)) {
             userPrompt.append("User recent favorite trips (JSON): ")
-                    .append(recentFavoritesJson)
+                    .append(trimToMaxChars(recentFavoritesJson, MAX_FAVORITES_JSON_CHARS))
                     .append("\n");
         }
         userPrompt.append("Destination city: ").append(city).append("\n");
@@ -340,8 +361,11 @@ public class TripPlanOrchestrator {
         if (StringUtils.hasText(topTagName)) {
             userPrompt.append("Top interest tag name: ").append(topTagName).append("\n");
         }
-        userPrompt.append("Please answer in Chinese, ")
-                .append("and only output the explanation text without any extra formatting.");
+        userPrompt.append("Constraints: ")
+                .append("1) Reply in Chinese. ")
+                .append("2) Must mention the destination city. ")
+                .append("3) 2~3 sentences. ")
+                .append("4) No markdown/code/json, only plain text.");
 
         String explanation = aiClient.chat(systemPrompt, userPrompt.toString());
         if (!StringUtils.hasText(explanation)) {
@@ -365,9 +389,22 @@ public class TripPlanOrchestrator {
             qa.setMessage("解释过短，疑似异常");
             return qa;
         }
+        if (explanation.length() > 500) {
+            qa.setPassed(false);
+            qa.setMessage("解释过长，疑似跑题或包含无关内容");
+            return qa;
+        }
         if (StringUtils.hasText(city) && !explanation.contains(city)) {
             qa.setPassed(false);
             qa.setMessage("解释中未提及目的地城市，可能不相关");
+            return qa;
+        }
+        String lower = explanation.toLowerCase();
+        if (lower.contains("```") || lower.contains("{") || lower.contains("json")
+                || lower.contains("role") || lower.contains("system prompt")
+                || lower.contains("ignore previous") || explanation.contains("忽略之前")) {
+            qa.setPassed(false);
+            qa.setMessage("解释疑似包含格式化/注入痕迹，拒绝");
             return qa;
         }
         qa.setPassed(true);
@@ -381,7 +418,9 @@ public class TripPlanOrchestrator {
     private String buildLocalExplanation(Map<String, Object> profileMap,
                                          String city,
                                          Integer days,
-                                         String topTagName) {
+                                         String topTagName,
+                                         LocalDate startDate,
+                                         boolean hasRecentFavorites) {
         StringBuilder sb = new StringBuilder();
         sb.append("本行程是根据你的基础出行偏好生成的");
         if (StringUtils.hasText(topTagName)) {
@@ -390,12 +429,29 @@ public class TripPlanOrchestrator {
         if (StringUtils.hasText(city)) {
             sb.append("，规划了一个为期 ").append(days).append(" 天的 ").append(city).append(" 行程");
         }
+        if (startDate != null) {
+            String season = toSeason(startDate);
+            if (StringUtils.hasText(season)) {
+                sb.append("，出行时间在").append(season).append("更适合按节奏安排");
+            }
+        }
+        if (hasRecentFavorites) {
+            sb.append("，也参考了你最近收藏的行程偏好");
+        }
         Object budget = profileMap == null ? null : profileMap.get("budget");
         if (budget != null) {
             sb.append("，并参考了你偏好的预算区间：").append(budget);
         }
         sb.append("。");
         return sb.toString();
+    }
+
+    private String toSeason(LocalDate date) {
+        int m = date.getMonthValue();
+        if (m >= 3 && m <= 5) return "春季";
+        if (m >= 6 && m <= 8) return "夏季";
+        if (m >= 9 && m <= 11) return "秋季";
+        return "冬季";
     }
 
     private Map<String, Object> parseProfile(UserProfile profile) {
@@ -457,45 +513,48 @@ public class TripPlanOrchestrator {
                     .filter(t -> t != null && t.getId() != null)
                     .map(t -> Map.of(
                             "tripId", t.getId(),
-                            "title", t.getTitle(),
+                            "title", trimToMaxChars(t.getTitle(), MAX_TITLE_CHARS),
                             "destinationCity", t.getDestinationCity(),
                             "days", t.getDays()))
                     .toList();
-            return objectMapper.writeValueAsString(simpleList);
+            String json = objectMapper.writeValueAsString(simpleList);
+            return trimToMaxChars(json, MAX_FAVORITES_JSON_CHARS);
         } catch (Exception e) {
             // 画像增强失败不影响主流程
             return null;
         }
     }
 
-    private AiTripPlanVO tryLoadIdempotentResult(String idempotencyKey) {
-        if (!StringUtils.hasText(idempotencyKey)) {
+    private AiTripPlanVO tryLoadIdempotentResult(String resKey) {
+        if (!StringUtils.hasText(resKey)) {
             return null;
         }
         try {
-            String key = "ai:idemp:trip-plan:" + idempotencyKey;
-            String json = stringRedisTemplate.opsForValue().get(key);
+            String json = stringRedisTemplate.opsForValue().get(resKey);
             if (!StringUtils.hasText(json)) {
                 return null;
             }
             return objectMapper.readValue(json, AiTripPlanVO.class);
         } catch (Exception e) {
-            log.warn("读取 AI 幂等结果失败, key={}", idempotencyKey, e);
+            log.warn("读取 AI 幂等结果失败, resKey={}", resKey, e);
             return null;
         }
     }
 
-    private void cacheIdempotentResult(String idempotencyKey, AiTripPlanVO vo) {
-        if (!StringUtils.hasText(idempotencyKey) || vo == null) {
+    private void cacheIdempotentResult(String resKey, AiTripPlanVO vo) {
+        if (!StringUtils.hasText(resKey) || vo == null) {
             return;
         }
         try {
-            String key = "ai:idemp:trip-plan:" + idempotencyKey;
             String json = objectMapper.writeValueAsString(vo);
-            stringRedisTemplate.opsForValue().set(key, json, 10, TimeUnit.MINUTES);
+            stringRedisTemplate.opsForValue().set(resKey, json, 10, TimeUnit.MINUTES);
         } catch (Exception e) {
-            log.warn("写入 AI 幂等结果失败, key={}", idempotencyKey, e);
+            log.warn("写入 AI 幂等结果失败, resKey={}", resKey, e);
         }
+    }
+
+    private String buildIdempotencyResKey(Long userId, String idempotencyKey) {
+        return "ai:idemp:trip-plan:res:" + userId + ":" + idempotencyKey;
     }
 
     private String safeToJson(Map<String, Object> profileMap) {
@@ -503,6 +562,64 @@ public class TripPlanOrchestrator {
             return objectMapper.writeValueAsString(profileMap == null ? Collections.emptyMap() : profileMap);
         } catch (Exception e) {
             return "{}";
+        }
+    }
+
+    private String safeToJsonWithLimit(Map<String, Object> profileMap, int maxChars) {
+        return trimToMaxChars(safeToJson(profileMap), maxChars);
+    }
+
+    private String trimToMaxChars(String s, int maxChars) {
+        if (!StringUtils.hasText(s)) {
+            return s;
+        }
+        if (maxChars <= 0 || s.length() <= maxChars) {
+            return s;
+        }
+        return s.substring(0, maxChars) + "...";
+    }
+
+    /**
+     * 画像白名单 + 裁剪：避免 prompt 爆炸与高基数字段污染。
+     */
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> sanitizeProfileMap(Map<String, Object> profileMap) {
+        if (profileMap == null || profileMap.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        String rawJson = safeToJson(profileMap);
+        if (rawJson.length() <= MAX_PROFILE_JSON_CHARS && profileMap.size() <= 30) {
+            return profileMap;
+        }
+
+        Map<String, Object> safe = new LinkedHashMap<>();
+        copyIfPresent(profileMap, safe, "budget");
+        copyIfPresent(profileMap, safe, "travelStyle");
+        copyIfPresent(profileMap, safe, "pace");
+        copyIfPresent(profileMap, safe, "companions");
+        copyIfPresent(profileMap, safe, "foodPreference");
+        copyIfPresent(profileMap, safe, "hotelPreference");
+        copyIfPresent(profileMap, safe, "transportPreference");
+        copyIfPresent(profileMap, safe, "season");
+
+        Object tagsObj = profileMap.get("tags");
+        if (tagsObj instanceof List) {
+            List<Object> tags = (List<Object>) tagsObj;
+            if (tags.size() > 10) {
+                tags = tags.subList(0, 10);
+            }
+            safe.put("tags", tags);
+        }
+        return safe;
+    }
+
+    private void copyIfPresent(Map<String, Object> from, Map<String, Object> to, String key) {
+        if (from == null || to == null) {
+            return;
+        }
+        Object v = from.get(key);
+        if (v != null) {
+            to.put(key, v);
         }
     }
 
@@ -538,6 +655,7 @@ public class TripPlanOrchestrator {
         private Long userId;
         private TripAiPlanRequestDTO request;
         private String idempotencyKey;
+        private String idempotencyResKey;
         private Map<String, Object> profileMap;
         private boolean coldUser;
         private String topTagName;

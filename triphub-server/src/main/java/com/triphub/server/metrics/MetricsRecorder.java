@@ -5,6 +5,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.util.concurrent.TimeUnit;
+
 /**
  * 统一的业务指标记录器。
  *
@@ -45,6 +47,41 @@ public class MetricsRecorder {
         }
     }
 
+    /**
+     * 记录 AI Chat 调用结果（成功/失败/被熔断/被隔离等）。
+     */
+    public void recordAiChatCall(String outcome, String reason, String model) {
+        try {
+            meterRegistry.counter("triphub.ai.chat.call",
+                    "outcome", safe(outcome),
+                    "reason", safe(reason),
+                    "model", safe(model)).increment();
+        } catch (Exception e) {
+            log.debug("记录 AI 调用指标失败: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * 记录 AI Chat 调用耗时。
+     */
+    public void recordAiChatLatencyMs(long latencyMs, String outcome, String model) {
+        try {
+            meterRegistry.timer("triphub.ai.chat.latency",
+                    "outcome", safe(outcome),
+                    "model", safe(model))
+                    .record(latencyMs, TimeUnit.MILLISECONDS);
+        } catch (Exception e) {
+            log.debug("记录 AI 耗时指标失败: {}", e.getMessage());
+        }
+    }
+
+    private String safe(String s) {
+        if (s == null || s.isBlank()) {
+            return "unknown";
+        }
+        // tag 不宜过长，避免高基数/卡面板
+        return s.length() > 32 ? s.substring(0, 32) : s;
+    }
 }
 
 

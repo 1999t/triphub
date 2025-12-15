@@ -28,6 +28,22 @@ public class AiProperties {
      * Model name, e.g. gpt-4.1-mini.
      */
     private String model;
+
+    /**
+     * 连接超时（毫秒）。
+     */
+    private int connectTimeoutMs = 1000;
+
+    /**
+     * 单次请求超时（毫秒），包含网络 IO 与对端响应等待。
+     */
+    private int requestTimeoutMs = 5000;
+
+    /**
+     * 最大重试次数（不含首次请求）。
+     * 仅对 429/5xx/超时 这类可重试错误生效。
+     */
+    private int maxRetries = 1;
 }
 
 
