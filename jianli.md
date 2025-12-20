@@ -1,26 +1,23 @@
 # 谭雅雯
-<img src="assets/avatar.png" width="120" alt="证件照" align="right" />
+<img src="https://raw.githubusercontent.com/1999t/triphub/main/assets/avatar.png" width="120" alt="证件照" align="right" />
 
 **求职意向**：Java后端开发工程师｜**工作经验**：3 年
-
 **电话**：13891704239 ｜ **邮箱**：tanyawen1106@163.com ｜ **GitHub**：[github.com/1999t](https://github.com/1999t)
-
 **教育背景**：长安大学｜软件工程｜2018.09 - 2022.06  
 **技术能力**：**语言** Java / Kotlin / C++ ｜**后端** Spring Boot / MyBatis-Plus / MySQL / Redis / JWT / Docker
 
 ## 工作经历
 
 **Zoom｜Zoom Phone Appliance / Android Zoom Rooms｜系统与客户端开发（2022.07 – 至今）**
-
 - **背景**：面向弱性能企业级终端（2GB 内存、低频 ARM SoC），负责通话系统核心能力、性能优化与长期稳定性建设。
-- **通话架构与状态建模**：通话按钮体系重构：将分散在 Fragment / ViewModel 的 UI 判断逻辑，统一为 C++ Proto 驱动的数据模型。设计 CallButtonManager 规则引擎，根据通话状态、设备尺寸、紧急/E2EE 场景动态计算主面板与溢出菜单。UI 层仅做 数据消费 + Diff 更新，新按钮接入成本从多处修改降低为单条规则配置。
-- **性能分析与优化（弱性能设备）**：构建 UI 性能实验矩阵（首帧、Layout/Measure、Drawable vs Canvas），而非拍脑袋调优。定位 layered XML Drawable + 复杂圆角为首要瓶颈，改为 Canvas 绘制显著降低首帧耗时。对内部 Prism 组件做性能画像，提出 Lite 化与使用边界策略，减少高频区初始化成本
+- **通话架构与状态建模**：重构通话按钮管理体系，采用"C++ 建模 + Kotlin 规则引擎"分层架构。底层通过 Proto 统一状态表达，上层 CallButtonManager 根据场景（通话状态/屏幕尺寸/紧急监督模式）动态编排按钮布局，UI 层专注增量渲染。解耦业务逻辑与 UI 判断，使新增按钮开发效率提升，跨 JNI 通信减少，状态一致性问题显著减少。
+- **性能分析与优化（弱性能设备）**：构建 UI 性能实验收集数据（首帧、Layout/Measure、Drawable vs Canvas），而非拍脑袋调优。定位 layered XML Drawable + 复杂圆角为首要瓶颈，改为 Canvas 绘制显著降低首帧耗时，并产出相应的工具类方便未来的性能检测分析。对内部 Prism 组件做性能分析，提出 Lite 化与使用边界策略，减少高频区初始化成本
 - **终端稳定性与系统工程**：设计最近交互联系人缓存（LRU + 懒初始化），解决 CallLog 生命周期脆弱导致的多起现场崩溃。重构自动重启策略：支持跨零点窗口、随机抖动、能力检测，避免大规模设备“重启风暴”。长期运行场景下显著降低内存泄漏、时间逻辑错误带来的系统性风险。
+- **AI实践**：针对 ZPA 平台运用 Claude skills 的设计思想，设计实现 zpa-figma-to-code 的工具实现较为精准的 UI code 生成。
 
 ## 项目经历
 
 **TripHub｜行程规划与个性化推荐平台（后端开发）**
-
 - **问题**：需要支撑登录鉴权、行程数据建模与高频读取，同时控制越权访问与外部依赖风险。
 - **方案**：手机号验证码 + JWT 登录，Redis 管理登录态并支持主动失效；围绕 Trip/Day/Item 建模，统一校验行程归属与可见性避免越权；行程详情引入缓存与异步更新（热点聚合/定期落库）降低 DB 压力；Redis ZSet 维护行程/目的地热度榜；收藏行为按幂等设计并异步更新用户画像；外部 AI 增加限流、失败兜底，确保依赖异常不影响核心接口。
 - **技术点**：Spring Boot / MyBatis-Plus / MySQL / Redis（ZSet、缓存、登录态）/ JWT / Docker；幂等、限流、异步更新、缓存一致性
